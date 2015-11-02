@@ -1,0 +1,26 @@
+<!-- productionは別で準備すること！-->
+<!--
+  <seelog type="asynctimer" asyncinterval="1000">
+  <seelog type="adaptive" mininterval="2000000" maxinterval="100000000" critmsgcount="500" minlevel="debug">
+-->
+<seelog type="sync">
+  <formats>
+    <format id="fmt_default" format="%Date %Time%t%File:%Line%t[%Lev] %Msg%n"/>
+    <format id="fmt_warn"    format="%EscM(33)%Date %Time%t%File:%Line%t[%Lev] %Msg%EscM(0)%n"/>
+    <format id="fmt_error"   format="%EscM(31)%Date %Time%t%File:%Line%t[%Lev] %Msg%EscM(0)%n"/>
+  </formats>
+  <outputs>
+    <filter levels="trace,debug,info">
+      <console formatid="fmt_default"/>
+      <rollingfile filename="/tmp/log/result.log" type="date" datepattern="02.01.2006" archivetype="zip" formatid="fmt_default" />
+    </filter>
+    <filter levels="warn">
+      <console formatid="fmt_warn"/>
+      <rollingfile filename="/tmp/log/result.log" type="date" datepattern="02.01.2006" archivetype="zip" formatid="fmt_default" />
+    </filter>
+    <filter levels="error,critical">
+      <console formatid="fmt_error"/>
+      <rollingfile filename="/tmp/log/result.log" type="date" datepattern="02.01.2006" archivetype="zip" formatid="fmt_default" />
+    </filter>
+  </outputs>
+</seelog>
