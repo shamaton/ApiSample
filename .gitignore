@@ -25,3 +25,7 @@ _testmain.go
 
 # 実行ファイル除外
 bin/
+
+# エディタ(intellj)
+.idea/
+*.iml
