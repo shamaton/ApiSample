@@ -161,10 +161,3 @@ func main() {
 		log.Critical(err)
 	}
 }
-
-// エラー表示
-func checkErr(err error, msg string) {
-	if err != nil {
-		log.Error(msg, err)
-	}
-}
