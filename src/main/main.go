@@ -93,12 +93,12 @@ func Custom() gin.HandlerFunc {
 	}
 }
 
-func loadConfig() {
+func setLoggerConfig() {
 	// PJ直下で実装した場合
 	logger, err := log.LoggerFromConfigAsFile("./conf/seelog/development.xml")
 
 	if err != nil {
-		panic("fail to load config")
+		panic("fail to load logger setting")
 	}
 
 	log.ReplaceLogger(logger)
@@ -135,7 +135,7 @@ func main() {
 	// context
 	ctx = context.Background()
 
-	loadConfig()
+	setLoggerConfig()
 
 	// game config
 	gameConf := loadGameConfig()
