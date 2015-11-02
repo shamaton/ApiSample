@@ -5,6 +5,16 @@
 DIR=`dirname $0`
 cd ${DIR}
 
+# go fmt
+
+for f in `git diff --name-only | grep '.go$' `;
+do
+  echo "go fmt ${f}"
+  go fmt ./${f};
+done
+
+echo ""
+
 # diretory create for build
 if [ ! -d "bin" ]; then
   mkdir bin
