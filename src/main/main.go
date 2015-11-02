@@ -1,6 +1,7 @@
 package main
 
 import (
+	gameconf "conf/gameConf"
 	"controller"
 	"hoge"
 	"time"
@@ -15,40 +16,13 @@ import (
 	"os"
 )
 
-type gameConfig struct {
-	Server ServerConfig
-	Db     DbConfig
-	Kvs    KvsConfig
-}
-
-type ServerConfig struct {
-	Host  string        `toml:"host"`
-	Port  string        `toml:"port"`
-	Slave []SlaveServer `toml:"slave"`
-}
-
-type SlaveServer struct {
-	Weight int    `toml:"weight"`
-	Ip     string `toml:"ip"`
-}
-
-type DbConfig struct {
-	User string `toml:"user"`
-	Pass string `toml:"pass"`
-}
-
-type KvsConfig struct {
-	Host string `toml:"host"`
-	Port string `toml:"port"`
-}
-
 // global
 var (
 	ctx context.Context
 )
 
 // redis ConnectionPooling
-func newPool(gameConf *gameConfig) *redis.Pool {
+func newPool(gameConf *gameconf.GameConfig) *redis.Pool {
 	// KVSのpoolを取得
 	return &redis.Pool{
 
@@ -105,8 +79,8 @@ func setLoggerConfig() {
 
 }
 
-func loadGameConfig() *gameConfig {
-	var gameConf gameConfig
+func loadGameConfig() *gameconf.GameConfig {
+	var gameConf gameconf.GameConfig
 
 	gameMode := os.Getenv("GAMEMODE")
 
@@ -142,7 +116,7 @@ func main() {
 	ctx = context.WithValue(ctx, "gameConf", gameConf)
 
 	// db
-	hoge.BuildInstances()
+	hoge.BuildInstances(ctx)
 
 	// redis
 	redis_pool := newPool(gameConf)

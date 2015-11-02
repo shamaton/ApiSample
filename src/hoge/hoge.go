@@ -5,6 +5,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/go-xorm/xorm"
+	"golang.org/x/net/context"
 )
 
 var dbMasterW *xorm.Engine
@@ -14,7 +15,7 @@ var dbShardRMap map[int]*xorm.Engine
 
 var shardIds = [...]int{1, 2}
 
-func BuildInstances() {
+func BuildInstances(ctx context.Context) {
 	var err error
 
 	// mapは初期化されないので注意
