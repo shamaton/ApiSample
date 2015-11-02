@@ -10,8 +10,37 @@ import (
 
 	log "github.com/cihub/seelog"
 
+	"github.com/BurntSushi/toml"
 	"github.com/garyburd/redigo/redis"
+	"os"
 )
+
+type gameConfig struct {
+	Server ServerConfig
+	Db     DbConfig
+	Kvs    KvsConfig
+}
+
+type ServerConfig struct {
+	Host  string        `toml:"host"`
+	Port  string        `toml:"port"`
+	Slave []SlaveServer `toml:"slave"`
+}
+
+type SlaveServer struct {
+	Weight int    `toml:"weight"`
+	Ip     string `toml:"ip"`
+}
+
+type DbConfig struct {
+	User string `toml:"user"`
+	Pass string `toml:"pass"`
+}
+
+type KvsConfig struct {
+	Host string `toml:"host"`
+	Port string `toml:"port"`
+}
 
 // global
 var (
@@ -19,17 +48,15 @@ var (
 )
 
 // redis ConnectionPooling
-func newPool() *redis.Pool {
-	hostname := "127.0.0.1"
-	port := "6379"
-
+func newPool(gameConf *gameConfig) *redis.Pool {
+	// KVSのpoolを取得
 	return &redis.Pool{
 
 		MaxIdle:     3,
 		IdleTimeout: 240 * time.Second,
 
 		Dial: func() (redis.Conn, error) {
-			c, err := redis.Dial("tcp", hostname+":"+port)
+			c, err := redis.Dial("tcp", gameConf.Kvs.Host+":"+gameConf.Kvs.Port)
 
 			if err != nil {
 				return nil, err
@@ -75,6 +102,33 @@ func loadConfig() {
 	}
 
 	log.ReplaceLogger(logger)
+
+}
+
+func loadGameConfig() *gameConfig {
+	var gameConf gameConfig
+
+	gameMode := os.Getenv("GAMEMODE")
+
+	// config load
+	switch gameMode {
+	case "PRODUCTION":
+		log.Info("SET PRODUCTION MODE...")
+
+	case "DEVELOPMENT":
+		log.Info("SET DEVELOPMENT MODE...")
+
+	default:
+		log.Info("SET LOCAL MODE...")
+
+		_, err := toml.DecodeFile("./conf/game/local.toml", &gameConf)
+		if err != nil {
+			log.Critical("gameConf local.toml error!!", err)
+			os.Exit(1)
+		}
+	}
+
+	return &gameConf
 }
 
 func main() {
@@ -83,11 +137,15 @@ func main() {
 
 	loadConfig()
 
+	// game config
+	gameConf := loadGameConfig()
+	ctx = context.WithValue(ctx, "gameConf", gameConf)
+
 	// db
 	hoge.BuildInstances()
 
 	// redis
-	redis_pool := newPool()
+	redis_pool := newPool(gameConf)
 	ctx = context.WithValue(ctx, "redis", redis_pool)
 
 	router := gin.Default()
