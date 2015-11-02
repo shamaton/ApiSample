@@ -3,9 +3,12 @@ package hoge
 import (
 	"log"
 
+	"conf/gameConf"
+	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/go-xorm/xorm"
 	"golang.org/x/net/context"
+	"strconv"
 )
 
 var dbMasterW *xorm.Engine
@@ -18,25 +21,53 @@ var shardIds = [...]int{1, 2}
 func BuildInstances(ctx context.Context) {
 	var err error
 
+	gameConf := ctx.Value("gameConf").(*gameConf.GameConfig)
+
 	// mapは初期化されないので注意
 	dbShardWMap = map[int]*xorm.Engine{}
 	dbShardRMap = map[int]*xorm.Engine{}
 
-	// master
-	dbMasterW, err = xorm.NewEngine("mysql", "game:game@tcp(localhost:3306)/game_master?charset=utf8")
+	master_dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8",
+		gameConf.Db.User,
+		gameConf.Db.Pass,
+		gameConf.Server.Host,
+		gameConf.Server.Port,
+		"game_master")
+
+	// master_master
+	dbMasterW, err = xorm.NewEngine("mysql", master_dsn)
 	checkErr(err, "master instance failed!!")
-	dbShardWMap[1], err = xorm.NewEngine("mysql", "game:game@tcp(localhost:3306)/game_shard_1?charset=utf8")
-	checkErr(err, "shard 1 instance failed!!")
-	dbShardWMap[2], err = xorm.NewEngine("mysql", "game:game@tcp(localhost:3306)/game_shard_2?charset=utf8")
-	checkErr(err, "shard 2 instance failed!!")
+
+	// master_shard
+	for i := 0; i < 2; i++ {
+		shard_id := i + 1
+		shard_dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8",
+			gameConf.Db.User,
+			gameConf.Db.Pass,
+			gameConf.Server.Host,
+			gameConf.Server.Port,
+			"game_shard_"+strconv.Itoa(shard_id))
+		dbShardWMap[shard_id], err = xorm.NewEngine("mysql", shard_dsn)
+		checkErr(err, "shard "+strconv.Itoa(shard_id)+" instance failed!!")
+	}
 
 	// slave
-	dbMasterR, err = xorm.NewEngine("mysql", "game:game@tcp(localhost:3306)/game_master?charset=utf8")
+	// TODO : 複数台対応
+	dbMasterR, err = xorm.NewEngine("mysql", master_dsn)
 	checkErr(err, "master instance failed!!")
-	dbShardRMap[1], err = xorm.NewEngine("mysql", "game:game@tcp(localhost:3306)/game_shard_1?charset=utf8")
-	checkErr(err, "shard 1 instance failed!!")
-	dbShardRMap[2], err = xorm.NewEngine("mysql", "game:game@tcp(localhost:3306)/game_shard_2?charset=utf8")
-	checkErr(err, "shard 2 instance failed!!")
+
+	// master_shard
+	for i := 0; i < 2; i++ {
+		shard_id := i + 1
+		shard_dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8",
+			gameConf.Db.User,
+			gameConf.Db.Pass,
+			gameConf.Server.Host,
+			gameConf.Server.Port,
+			"game_shard_"+strconv.Itoa(shard_id))
+		dbShardRMap[shard_id], err = xorm.NewEngine("mysql", shard_dsn)
+		checkErr(err, "shard "+strconv.Itoa(shard_id)+" instance failed!!")
+	}
 }
 
 // 仮。これはリクエストキャッシュに持つ。
