@@ -15,11 +15,6 @@ import (
 )
 
 var (
-	dbMasterW    *xorm.Engine
-	dbMasterR    *xorm.Engine
-	dbShardWMap  map[int]*xorm.Engine
-	dbShardRMaps []map[int]*xorm.Engine
-
 	slaveWeights []int
 
 	shardIds = [...]int{1, 2}
@@ -36,13 +31,13 @@ const (
 	MODE_BAK        // backup
 )
 
-func BuildInstances(ctx context.Context) {
+func BuildInstances(ctx context.Context) context.Context {
 	var err error
 
 	gameConf := ctx.Value("gameConf").(*gameConf.GameConfig)
 
 	// mapは初期化されないので注意
-	dbShardWMap = map[int]*xorm.Engine{}
+	var dbShardWMap = map[int]*xorm.Engine{}
 
 	master_dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8",
 		gameConf.Db.User,
@@ -52,7 +47,7 @@ func BuildInstances(ctx context.Context) {
 		"game_master")
 
 	// master_master
-	dbMasterW, err = xorm.NewEngine("mysql", master_dsn)
+	dbMasterW, err := xorm.NewEngine("mysql", master_dsn)
 	checkErr(err, "masterDB master instance failed!!")
 
 	// master_shard
@@ -76,10 +71,11 @@ func BuildInstances(ctx context.Context) {
 		gameConf.Server.Port,
 		"game_master")
 
-	dbMasterR, err = xorm.NewEngine("mysql", shard_dsn)
+	dbMasterR, err := xorm.NewEngine("mysql", shard_dsn)
 	checkErr(err, "slaveDB master instance failed!!")
 
 	// slave_shard
+	var dbShardRMaps []map[int]*xorm.Engine
 	for slave_index, slaveConf := range gameConf.Server.Slave {
 		var shardMap = map[int]*xorm.Engine{}
 
@@ -103,9 +99,19 @@ func BuildInstances(ctx context.Context) {
 		}
 	}
 
+	// contextに設定
+	ctx = context.WithValue(ctx, "dbMasterW", dbMasterW)
+	ctx = context.WithValue(ctx, "dbMasterR", dbMasterR)
+	ctx = context.WithValue(ctx, "dbShardWMap", dbShardWMap)
+	ctx = context.WithValue(ctx, "dbShardRMaps", dbShardRMaps)
+
+	return ctx
 }
 
 func StartTx(c *gin.Context) {
+	gc := c.Value("globalContext").(context.Context)
+	dbShardWMap := gc.Value("dbShardWMap").(map[int]*xorm.Engine)
+
 	var txMap = map[int]*xorm.Session{}
 	// txのマップを作成
 	for k, v := range dbShardWMap {
@@ -153,6 +159,9 @@ func Close(c *gin.Context) {
 
 func GetDBConnection(c *gin.Context, tableName string) (*xorm.Engine, error) {
 	var err error
+
+	gc := c.Value("globalContext").(context.Context)
+
 	// db_conf_tableからshardかmasterを取得
 	dbType := SHARD // shard
 
@@ -160,9 +169,10 @@ func GetDBConnection(c *gin.Context, tableName string) (*xorm.Engine, error) {
 	// masterの場合
 	switch dbType {
 	case MASTER:
-		conn = dbMasterR
+		conn = gc.Value("dbMasterR").(*xorm.Engine)
 	case SHARD:
 		slaveIndex := c.Value("slaveIndex").(int)
+		dbShardRMaps := gc.Value("dbShardRMaps").([]map[int]*xorm.Engine)
 		shardMap := dbShardRMaps[slaveIndex]
 		// TODO:仮
 		shardId := 1

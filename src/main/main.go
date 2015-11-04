@@ -51,7 +51,7 @@ func Custom() gin.HandlerFunc {
 		t := time.Now()
 
 		// set global context
-		c.Set("gContext", ctx)
+		c.Set("globalContext", ctx)
 
 		// リクエスト前処理
 		defer log.Flush()
@@ -123,7 +123,7 @@ func main() {
 	ctx = context.WithValue(ctx, "gameConf", gameConf)
 
 	// db
-	hoge.BuildInstances(ctx)
+	ctx = hoge.BuildInstances(ctx)
 
 	// redis
 	redis_pool := newPool(gameConf)

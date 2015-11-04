@@ -26,7 +26,7 @@ func Test(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Value("gContext").(context.Context)
+	ctx := c.Value("globalContext").(context.Context)
 
 	// データをselect
 	res := model.Find(c, 3)
