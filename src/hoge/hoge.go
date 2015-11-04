@@ -11,12 +11,16 @@ import (
 	"strconv"
 )
 
-var dbMasterW *xorm.Engine
-var dbMasterR *xorm.Engine
-var dbShardWMap map[int]*xorm.Engine
-var dbShardRMap map[int]*xorm.Engine
+var (
+	dbMasterW    *xorm.Engine
+	dbMasterR    *xorm.Engine
+	dbShardWMap  map[int]*xorm.Engine
+	dbShardRMaps []map[int]*xorm.Engine
 
-var shardIds = [...]int{1, 2}
+	shardWeightMap map[int]int
+
+	shardIds = [...]int{1, 2}
+)
 
 func BuildInstances(ctx context.Context) {
 	var err error
@@ -25,7 +29,6 @@ func BuildInstances(ctx context.Context) {
 
 	// mapは初期化されないので注意
 	dbShardWMap = map[int]*xorm.Engine{}
-	dbShardRMap = map[int]*xorm.Engine{}
 
 	master_dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8",
 		gameConf.Db.User,
@@ -36,11 +39,10 @@ func BuildInstances(ctx context.Context) {
 
 	// master_master
 	dbMasterW, err = xorm.NewEngine("mysql", master_dsn)
-	checkErr(err, "master instance failed!!")
+	checkErr(err, "masterDB master instance failed!!")
 
 	// master_shard
-	for i := 0; i < 2; i++ {
-		shard_id := i + 1
+	for _, shard_id := range shardIds {
 		shard_dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8",
 			gameConf.Db.User,
 			gameConf.Db.Pass,
@@ -48,26 +50,40 @@ func BuildInstances(ctx context.Context) {
 			gameConf.Server.Port,
 			"game_shard_"+strconv.Itoa(shard_id))
 		dbShardWMap[shard_id], err = xorm.NewEngine("mysql", shard_dsn)
-		checkErr(err, "shard "+strconv.Itoa(shard_id)+" instance failed!!")
+		checkErr(err, "master shard "+strconv.Itoa(shard_id)+" instance failed!!")
+
 	}
 
-	// slave
-	// TODO : 複数台対応
-	dbMasterR, err = xorm.NewEngine("mysql", master_dsn)
-	checkErr(err, "master instance failed!!")
+	// slave_master
+	shard_dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8",
+		gameConf.Db.User,
+		gameConf.Db.Pass,
+		gameConf.Server.Host,
+		gameConf.Server.Port,
+		"game_master")
 
-	// master_shard
-	for i := 0; i < 2; i++ {
-		shard_id := i + 1
-		shard_dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8",
-			gameConf.Db.User,
-			gameConf.Db.Pass,
-			gameConf.Server.Host,
-			gameConf.Server.Port,
-			"game_shard_"+strconv.Itoa(shard_id))
-		dbShardRMap[shard_id], err = xorm.NewEngine("mysql", shard_dsn)
-		checkErr(err, "shard "+strconv.Itoa(shard_id)+" instance failed!!")
+	dbMasterR, err = xorm.NewEngine("mysql", shard_dsn)
+	checkErr(err, "slaveDB master instance failed!!")
+
+	// slave_shard
+	for _, slaveConf := range gameConf.Server.Slave {
+		var shardMap = map[int]*xorm.Engine{}
+
+		for _, shard_id := range shardIds {
+			dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8",
+				gameConf.Db.User,
+				gameConf.Db.Pass,
+				slaveConf.Host,
+				gameConf.Server.Port,
+				"game_shard_"+strconv.Itoa(shard_id))
+
+			// create instance
+			shardMap[shard_id], err = xorm.NewEngine("mysql", dsn)
+			checkErr(err, "slave shard"+strconv.Itoa(shard_id)+" instance failed!!")
+		}
+		dbShardRMaps = append(dbShardRMaps, shardMap)
 	}
+
 }
 
 // 仮。これはリクエストキャッシュに持つ。

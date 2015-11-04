@@ -18,7 +18,7 @@ type ServerConfig struct {
 
 type SlaveServer struct {
 	Weight int    `toml:"weight"`
-	Ip     string `toml:"ip"`
+	Host   string `toml:"host"`
 }
 
 type DbConfig struct {
