@@ -4,7 +4,7 @@ import (
 	"hoge"
 	"log"
 
-	"github.com/go-xorm/xorm"
+	"github.com/gin-gonic/gin"
 )
 
 type User struct {
@@ -23,13 +23,12 @@ var (
 	m modelBase = modelBase{shard: true}
 )
 
-func Find(userId int) User {
-	var h *xorm.Engine
-	h = hoge.GetDBShardConnection("user", 1)
+func Find(c *gin.Context, userId int) User {
+	h, err := hoge.GetDBConnection(c, "user")
 
 	// データをselect
 	var user = User{Id: userId}
-	_, err := h.Get(&user)
+	_, err = h.Get(&user)
 
 	//var user User
 	//_, err := h.Id(userId).Get(&user)

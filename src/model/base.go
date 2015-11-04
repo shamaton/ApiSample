@@ -2,10 +2,6 @@ package model
 
 import "log"
 
-const MODE_W = "W"     // master
-const MODE_R = "R"     // slave
-const MODE_BAK = "BAK" // backup
-
 type modelBase struct {
 	pks   []string
 	shard bool
@@ -14,6 +10,10 @@ type modelBase struct {
 func (m *modelBase) SelectByPk() {
 	log.Println("call select by pk")
 }
+
+/*
+func ForUpdate
+*/
 
 /*
 // shardを判断して返す, falseの場合masterをそのまま返す

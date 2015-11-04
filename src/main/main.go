@@ -58,6 +58,7 @@ func Custom() gin.HandlerFunc {
 
 		// ランダムシード
 		rand.Seed(time.Now().UnixNano())
+		c.Set("slaveIndex", hoge.DecideUseSlave())
 
 		c.Next()
 

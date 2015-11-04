@@ -2,10 +2,10 @@ package controller
 
 import (
 	"hoge"
-	"log"
 	"model"
 	"net/http"
 
+	log "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
 	"github.com/go-xorm/core"
@@ -30,14 +30,15 @@ func Test(c *gin.Context) {
 	ctx := c.Value("gContext").(context.Context)
 
 	// データをselect
-	model.Find(3)
+	res := model.Find(c, 3)
+	log.Info(res)
 
 	// use redis
 	redisTest(ctx)
 
 	// データをupdate
 	var h *xorm.Engine
-	h = hoge.GetDBShardConnection("user", 1)
+	h, err = hoge.GetDBConnection(c, "user")
 
 	session := h.NewSession()
 	defer session.Close()
@@ -79,19 +80,19 @@ func redisTest(ctx context.Context) {
 
 	_, e2 := redis_conn.Do("SET", "message", "this is value")
 	if e2 != nil {
-		log.Fatalln("set message", e2)
+		log.Error("set message", e2)
 	}
 	s, err := redis.String(redis_conn.Do("GET", "message"))
 	if err != nil {
-		log.Fatalln("get message", err)
+		log.Error("get message", err)
 	}
-	log.Printf("%#v\n", s)
+	log.Info("%#v\n", s)
 }
 
 // エラー表示
 func checkErr(c *gin.Context, err error, msg string) bool {
 	if err != nil {
-		log.Println(msg, err)
+		log.Error(msg, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
 		return true
 	}

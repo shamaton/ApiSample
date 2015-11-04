@@ -1,8 +1,6 @@
 package hoge
 
 import (
-	"log"
-
 	"conf/gameConf"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
@@ -10,6 +8,10 @@ import (
 	"golang.org/x/net/context"
 	"math/rand"
 	"strconv"
+
+	"errors"
+	log "github.com/cihub/seelog"
+	"github.com/gin-gonic/gin"
 )
 
 var (
@@ -21,6 +23,17 @@ var (
 	slaveWeights []int
 
 	shardIds = [...]int{1, 2}
+)
+
+const (
+	MASTER = iota
+	SHARD
+)
+
+const (
+	MODE_W   = iota // master
+	MODE_R          // slave
+	MODE_BAK        // backup
 )
 
 func BuildInstances(ctx context.Context) {
@@ -92,45 +105,85 @@ func BuildInstances(ctx context.Context) {
 
 }
 
-// 仮。これはリクエストキャッシュに持つ。
-var txMap map[int]*xorm.Session
-
-func StartTx() {
-	txMap = map[int]*xorm.Session{}
+func StartTx(c *gin.Context) {
+	var txMap = map[int]*xorm.Session{}
 	// txのマップを作成
 	for k, v := range dbShardWMap {
-		log.Println(k, " start tx!!")
+		log.Info(k, " start tx!!")
 		txMap[k] = v.NewSession()
 	}
+	c.Set("txMap", txMap)
 	// errを返す
 }
 
-func Commit() {
+func Commit(c *gin.Context) {
+	txMap := c.Value("txMap").(map[int]*xorm.Session)
 	for k, v := range txMap {
-		log.Println(k, " commit!!")
+		log.Info(k, " commit!!")
 		/*err :=*/ v.Commit()
-		txMap[k] = nil
+		// txMap[k] = nil
 	}
+	c.Set("txMap", nil)
 	// errを返す
 }
 
-func RollBack() {
+func RollBack(c *gin.Context) {
+	txMap := c.Value("txMap").(map[int]*xorm.Session)
 	for k, v := range txMap {
-		log.Println(k, " commit!!")
+		log.Info(k, " commit!!")
 		/*err :=*/ v.Rollback()
-		txMap[k] = nil
+		// txMap[k] = nil
 	}
+	c.Set("txMap", nil)
 	// errを返す
 }
 
-func GetDBShardConnection(shard_type string, value int) *xorm.Engine {
-	shardId := 1
-	return dbShardWMap[shardId]
+func GetDBConnection(c *gin.Context, tableName string) (*xorm.Engine, error) {
+	var err error
+	// db_conf_tableからshardかmasterを取得
+	dbType := SHARD // shard
+
+	var conn *xorm.Engine
+	// masterの場合
+	switch dbType {
+	case MASTER:
+		conn = dbMasterR
+	case SHARD:
+		slaveIndex := c.Value("slaveIndex").(int)
+		shardMap := dbShardRMaps[slaveIndex]
+		// TODO:仮
+		shardId := 1
+		conn = shardMap[shardId]
+
+	default:
+		err = errors.New("undefined db type!!")
+	}
+
+	// shardの場合
+	if conn == nil {
+		err = errors.New("not found db connection!!")
+	}
+	return conn, err
 }
 
-func GetTxByShardKey(shard_type string, value int) *xorm.Session {
+func GetDBSession(c *gin.Context) (*xorm.Session, error) {
+	isTxStart := c.Value("isTxStart").(bool)
+
+	// TODO:仮
 	shardId := 1
-	return txMap[shardId]
+
+	var err error
+	var tx *xorm.Session
+
+	// セッションを開始してない場合はエラーとしておく
+	if isTxStart {
+		sMap := c.Value("txMap").(map[int]*xorm.Session)
+		tx = sMap[shardId]
+	} else {
+		err = errors.New("transaction not started!!")
+	}
+
+	return tx, err
 }
 
 // 使うslaveを決める
@@ -142,6 +195,6 @@ func DecideUseSlave() int {
 // エラー表示
 func checkErr(err error, msg string) {
 	if err != nil {
-		log.Fatalln(msg, err)
+		log.Error(msg, err)
 	}
 }
