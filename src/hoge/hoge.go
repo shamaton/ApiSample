@@ -138,6 +138,19 @@ func RollBack(c *gin.Context) {
 	// errを返す
 }
 
+func Close(c *gin.Context) {
+	// NOTE:txMapはキーが存在しているため、trueになる
+	iFace, _ := c.Get("txMap")
+
+	if iFace != nil {
+		txMap := iFace.(map[int]*xorm.Session)
+		for _, v := range txMap {
+			v.Close()
+		}
+		c.Set("txMap", nil)
+	}
+}
+
 func GetDBConnection(c *gin.Context, tableName string) (*xorm.Engine, error) {
 	var err error
 	// db_conf_tableからshardかmasterを取得
@@ -167,7 +180,6 @@ func GetDBConnection(c *gin.Context, tableName string) (*xorm.Engine, error) {
 }
 
 func GetDBSession(c *gin.Context) (*xorm.Session, error) {
-	isTxStart := c.Value("isTxStart").(bool)
 
 	// TODO:仮
 	shardId := 1
@@ -176,11 +188,12 @@ func GetDBSession(c *gin.Context) (*xorm.Session, error) {
 	var tx *xorm.Session
 
 	// セッションを開始してない場合はエラーとしておく
-	if isTxStart {
-		sMap := c.Value("txMap").(map[int]*xorm.Session)
+	iFace, valid := c.Get("txMap")
+	if valid {
+		sMap := iFace.(map[int]*xorm.Session)
 		tx = sMap[shardId]
 	} else {
-		err = errors.New("transaction not started!!")
+		err = errors.New("transaction not found!!")
 	}
 
 	return tx, err

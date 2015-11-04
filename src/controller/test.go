@@ -9,7 +9,6 @@ import (
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
 	"github.com/go-xorm/core"
-	"github.com/go-xorm/xorm"
 	"golang.org/x/net/context"
 )
 
@@ -37,19 +36,21 @@ func Test(c *gin.Context) {
 	redisTest(ctx)
 
 	// データをupdate
-	var h *xorm.Engine
-	h, err = hoge.GetDBConnection(c, "user")
+	hoge.StartTx(c)
 
-	session := h.NewSession()
-	defer session.Close()
+	tx, err := hoge.GetDBSession(c)
+	if checkErr(c, err, "begin error") {
+		return
+	}
+	defer hoge.Close(c)
 
-	err = session.Begin()
+	err = tx.Begin()
 	if checkErr(c, err, "begin error") {
 		return
 	}
 
 	var u []model.User
-	err = session.Where("id = ?", 3).ForUpdate().Find(&u)
+	err = tx.Where("id = ?", 3).ForUpdate().Find(&u)
 	if checkErr(c, err, "user not found") {
 		return
 	}
@@ -60,15 +61,18 @@ func Test(c *gin.Context) {
 	//time.Sleep(3 * time.Second)
 
 	//res, e := session.Id(user.Id).Cols("score").Update(&user) // 単一 PK
-	_, err = session.Id(core.PK{user.Id, user.Name}).Update(&user) // 複合PK
+	_, err = tx.Id(core.PK{user.Id, user.Name}).Update(&user) // 複合PK
 	if checkErr(c, err, "update error") {
 		return
 	}
 
-	err = session.Commit()
-	if checkErr(c, err, "commit error") {
-		return
-	}
+	hoge.Commit(c)
+
+	/*
+		err = session.Commit()
+		if checkErr(c, err, "commit error") {
+			return
+		}*/
 
 	c.JSON(http.StatusOK, &user)
 }
