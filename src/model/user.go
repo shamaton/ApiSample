@@ -24,7 +24,7 @@ var (
 )
 
 func Find(c *gin.Context, userId int) User {
-	h, err := hoge.GetDBConnection(c, "user")
+	h, err := hoge.GetDBConnection(c, "user", hoge.MODE_R)
 
 	// データをselect
 	var user = User{Id: userId}

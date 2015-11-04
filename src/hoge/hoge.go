@@ -26,9 +26,9 @@ const (
 )
 
 const (
-	MODE_W   = iota // master
-	MODE_R          // slave
-	MODE_BAK        // backup
+	MODE_W   = "W"   // master
+	MODE_R   = "R"   // slave
+	MODE_BAK = "BAK" // backup
 )
 
 func BuildInstances(ctx context.Context) context.Context {
@@ -157,10 +157,8 @@ func Close(c *gin.Context) {
 	}
 }
 
-func GetDBConnection(c *gin.Context, tableName string) (*xorm.Engine, error) {
+func GetDBConnection(c *gin.Context, tableName string, mode string) (*xorm.Engine, error) {
 	var err error
-
-	gc := c.Value("globalContext").(context.Context)
 
 	// db_conf_tableからshardかmasterを取得
 	dbType := SHARD // shard
@@ -169,14 +167,10 @@ func GetDBConnection(c *gin.Context, tableName string) (*xorm.Engine, error) {
 	// masterの場合
 	switch dbType {
 	case MASTER:
-		conn = gc.Value("dbMasterR").(*xorm.Engine)
+		gc := c.Value("globalContext").(context.Context)
+		conn = gc.Value("dbMaster" + mode).(*xorm.Engine)
 	case SHARD:
-		slaveIndex := c.Value("slaveIndex").(int)
-		dbShardRMaps := gc.Value("dbShardRMaps").([]map[int]*xorm.Engine)
-		shardMap := dbShardRMaps[slaveIndex]
-		// TODO:仮
-		shardId := 1
-		conn = shardMap[shardId]
+		conn, err = getDBShardConnection(c, mode)
 
 	default:
 		err = errors.New("undefined db type!!")
@@ -185,6 +179,36 @@ func GetDBConnection(c *gin.Context, tableName string) (*xorm.Engine, error) {
 	// shardの場合
 	if conn == nil {
 		err = errors.New("not found db connection!!")
+	}
+	return conn, err
+}
+
+func getDBShardConnection(c *gin.Context, mode string) (*xorm.Engine, error) {
+	var err error
+
+	var conn *xorm.Engine
+	gc := c.Value("globalContext").(context.Context)
+
+	// TODO:仮
+	shardId := 1
+
+	switch mode {
+	case MODE_W:
+		dbShardWMap := gc.Value("dbShardWMap").(map[int]*xorm.Engine)
+		conn = dbShardWMap[shardId]
+
+	case MODE_R:
+		slaveIndex := c.Value("slaveIndex").(int)
+		dbShardRMaps := gc.Value("dbShardRMaps").([]map[int]*xorm.Engine)
+		shardMap := dbShardRMaps[slaveIndex]
+
+		conn = shardMap[shardId]
+
+	case MODE_BAK:
+		// TODO:実装
+
+	default:
+		err = errors.New("invalid mode!!")
 	}
 	return conn, err
 }
