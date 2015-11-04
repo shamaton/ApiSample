@@ -1,4 +1,4 @@
-package hoge
+package DBI
 
 import (
 	"conf/gameConf"

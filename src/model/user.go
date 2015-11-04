@@ -1,7 +1,7 @@
 package model
 
 import (
-	"hoge"
+	"DBI"
 	"log"
 
 	"github.com/gin-gonic/gin"
@@ -24,7 +24,7 @@ var (
 )
 
 func Find(c *gin.Context, userId int) User {
-	h, err := hoge.GetDBConnection(c, "user", hoge.MODE_R)
+	h, err := DBI.GetDBConnection(c, "user", DBI.MODE_R)
 
 	// データをselect
 	var user = User{Id: userId}

@@ -1,9 +1,9 @@
 package main
 
 import (
+	"DBI"
 	gameconf "conf/gameConf"
 	"controller"
-	"hoge"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -58,7 +58,7 @@ func Custom() gin.HandlerFunc {
 
 		// ランダムシード
 		rand.Seed(time.Now().UnixNano())
-		c.Set("slaveIndex", hoge.DecideUseSlave())
+		c.Set("slaveIndex", DBI.DecideUseSlave())
 
 		c.Next()
 
@@ -123,7 +123,7 @@ func main() {
 	ctx = context.WithValue(ctx, "gameConf", gameConf)
 
 	// db
-	ctx = hoge.BuildInstances(ctx)
+	ctx = DBI.BuildInstances(ctx)
 
 	// redis
 	redis_pool := newPool(gameConf)

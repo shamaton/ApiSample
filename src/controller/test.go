@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"hoge"
+	"DBI"
 	"model"
 	"net/http"
 
@@ -36,13 +36,13 @@ func Test(c *gin.Context) {
 	redisTest(ctx)
 
 	// データをupdate
-	hoge.StartTx(c)
+	DBI.StartTx(c)
 
-	tx, err := hoge.GetDBSession(c)
+	tx, err := DBI.GetDBSession(c)
 	if checkErr(c, err, "begin error") {
 		return
 	}
-	defer hoge.Close(c)
+	defer DBI.Close(c)
 
 	err = tx.Begin()
 	if checkErr(c, err, "begin error") {
@@ -66,7 +66,7 @@ func Test(c *gin.Context) {
 		return
 	}
 
-	hoge.Commit(c)
+	DBI.Commit(c)
 
 	/*
 		err = session.Commit()
