@@ -89,6 +89,7 @@ func loadGameConfig() *gameconf.GameConfig {
 	gameMode := os.Getenv("GAMEMODE")
 
 	// config load
+	var filename string
 	switch gameMode {
 	case "PRODUCTION":
 		log.Info("SET PRODUCTION MODE...")
@@ -98,12 +99,13 @@ func loadGameConfig() *gameconf.GameConfig {
 
 	default:
 		log.Info("SET LOCAL MODE...")
+		filename = "local"
+	}
 
-		_, err := toml.DecodeFile("./conf/game/local.toml", &gameConf)
-		if err != nil {
-			log.Critical("gameConf local.toml error!!", err)
-			os.Exit(1)
-		}
+	_, err := toml.DecodeFile("./conf/game/"+filename+".toml", &gameConf)
+	if err != nil {
+		log.Critical("gameConf "+filename+".toml error!!", err)
+		os.Exit(1)
 	}
 
 	return &gameConf
