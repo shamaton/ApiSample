@@ -1,8 +1,8 @@
 package model
 
 import (
-	"DBI"
 	"log"
+	"sample/DBI"
 
 	"github.com/gin-gonic/gin"
 )

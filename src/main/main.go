@@ -1,9 +1,9 @@
 package main
 
 import (
-	"DBI"
-	gameconf "conf/gameConf"
-	"controller"
+	"sample/DBI"
+	"sample/conf/gameConf"
+	"sample/controller"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -23,7 +23,7 @@ var (
 )
 
 // redis ConnectionPooling
-func newPool(gameConf *gameconf.GameConfig) *redis.Pool {
+func newPool(gameConf *gameConf.GameConfig) *redis.Pool {
 	// KVSのpoolを取得
 	return &redis.Pool{
 
@@ -84,8 +84,8 @@ func setLoggerConfig() {
 
 }
 
-func loadGameConfig() *gameconf.GameConfig {
-	var gameConf gameconf.GameConfig
+func loadGameConfig() *gameConf.GameConfig {
+	var gameConf gameConf.GameConfig
 
 	gameMode := os.Getenv("GAMEMODE")
 

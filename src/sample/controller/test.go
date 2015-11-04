@@ -1,9 +1,9 @@
 package controller
 
 import (
-	"DBI"
-	"model"
 	"net/http"
+	"sample/DBI"
+	"sample/model"
 
 	log "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"

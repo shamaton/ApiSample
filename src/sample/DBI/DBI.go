@@ -1,12 +1,12 @@
 package DBI
 
 import (
-	"conf/gameConf"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/go-xorm/xorm"
 	"golang.org/x/net/context"
 	"math/rand"
+	"sample/conf/gameConf"
 	"strconv"
 
 	"errors"
