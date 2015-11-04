@@ -8,6 +8,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/go-xorm/xorm"
 	"golang.org/x/net/context"
+	"math/rand"
 	"strconv"
 )
 
@@ -17,7 +18,7 @@ var (
 	dbShardWMap  map[int]*xorm.Engine
 	dbShardRMaps []map[int]*xorm.Engine
 
-	shardWeightMap map[int]int
+	slaveWeights []int
 
 	shardIds = [...]int{1, 2}
 )
@@ -66,7 +67,7 @@ func BuildInstances(ctx context.Context) {
 	checkErr(err, "slaveDB master instance failed!!")
 
 	// slave_shard
-	for _, slaveConf := range gameConf.Server.Slave {
+	for slave_index, slaveConf := range gameConf.Server.Slave {
 		var shardMap = map[int]*xorm.Engine{}
 
 		for _, shard_id := range shardIds {
@@ -82,6 +83,11 @@ func BuildInstances(ctx context.Context) {
 			checkErr(err, "slave shard"+strconv.Itoa(shard_id)+" instance failed!!")
 		}
 		dbShardRMaps = append(dbShardRMaps, shardMap)
+
+		// slaveの選択比重
+		for i := 0; i < slaveConf.Weight; i++ {
+			slaveWeights = append(slaveWeights, slave_index)
+		}
 	}
 
 }
@@ -125,6 +131,12 @@ func GetDBShardConnection(shard_type string, value int) *xorm.Engine {
 func GetTxByShardKey(shard_type string, value int) *xorm.Session {
 	shardId := 1
 	return txMap[shardId]
+}
+
+// 使うslaveを決める
+func DecideUseSlave() int {
+	slaveIndex := rand.Intn(len(slaveWeights))
+	return slaveWeights[slaveIndex]
 }
 
 // エラー表示

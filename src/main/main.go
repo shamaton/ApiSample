@@ -13,6 +13,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/garyburd/redigo/redis"
+	"math/rand"
 	"os"
 )
 
@@ -54,6 +55,9 @@ func Custom() gin.HandlerFunc {
 
 		// リクエスト前処理
 		defer log.Flush()
+
+		// ランダムシード
+		rand.Seed(time.Now().UnixNano())
 
 		c.Next()
 
