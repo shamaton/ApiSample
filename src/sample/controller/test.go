@@ -5,8 +5,11 @@ import (
 	"sample/DBI"
 	"sample/model"
 
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	log "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
@@ -103,6 +106,19 @@ func TokenTest(c *gin.Context) {
 	log.Info(d)
 
 	checkErr(c, err, "token test error")
+
+	// sha256
+	recv_sha := c.PostForm("sha")
+	log.Info(recv_sha)
+
+	hash := hmac.New(sha256.New, []byte("secret_key"))
+	hash.Write([]byte("apple"))
+	hashsum := fmt.Sprintf("%x", hash.Sum(nil))
+	log.Infof(hashsum)
+
+	if recv_sha == hashsum {
+		log.Info("sha correct!!")
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "hello"})
 }
