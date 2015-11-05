@@ -5,6 +5,8 @@ import (
 	"sample/DBI"
 	"sample/model"
 
+	"encoding/base64"
+	"encoding/json"
 	log "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
@@ -16,6 +18,11 @@ import (
 type PostJSON struct {
 	Name  string `json:"Name" binding:"required"`
 	Score int    `json:"Score" binding:"required"`
+}
+
+type postData struct {
+	Name  string `json:"Name"`
+	Score int    `json:"Score"`
 }
 
 func Test(c *gin.Context) {
@@ -75,6 +82,29 @@ func Test(c *gin.Context) {
 		}*/
 
 	c.JSON(http.StatusOK, &user)
+}
+
+func TokenTest(c *gin.Context) {
+
+	var hoge postData
+	data := c.PostForm("data")
+	dd := []byte(data)
+	json.Unmarshal(dd, &hoge)
+	log.Info(hoge)
+
+	token := c.PostForm("token")
+	log.Info(token)
+
+	// tokenをjsonにもどす
+	tokenData, _ := base64.StdEncoding.DecodeString(token)
+
+	var d postData
+	err := json.Unmarshal(tokenData, &d)
+	log.Info(d)
+
+	checkErr(c, err, "token test error")
+
+	c.JSON(http.StatusOK, gin.H{"message": "hello"})
 }
 
 func redisTest(ctx context.Context) {

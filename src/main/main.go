@@ -134,6 +134,7 @@ func main() {
 
 	// make route
 	router.POST("/test", controller.Test)
+	router.POST("/token_test", controller.TokenTest)
 
 	err := router.Run(":9999")
 
