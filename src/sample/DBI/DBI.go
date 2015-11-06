@@ -31,6 +31,10 @@ const (
 	MODE_BAK = "BAK" // backup
 )
 
+const (
+	FOR_UPDATE = "FOR_UPDATE"
+)
+
 func BuildInstances(ctx context.Context) context.Context {
 	var err error
 
@@ -157,13 +161,18 @@ func Close(c *gin.Context) {
 	}
 }
 
-func GetDBConnection(c *gin.Context, tableName string, mode string) (*xorm.Engine, error) {
+func GetDBConnection(c *gin.Context, tableName string, options ...interface{}) (*xorm.Engine, error) {
 	var err error
+	var conn *xorm.Engine
+
+	mode, _, err := optionCheck(options...)
+	if err != nil {
+		return conn, err
+	}
 
 	// db_conf_tableからshardかmasterを取得
 	dbType := SHARD // shard
 
-	var conn *xorm.Engine
 	// masterの場合
 	switch dbType {
 	case MASTER:
@@ -244,4 +253,35 @@ func checkErr(err error, msg string) {
 	if err != nil {
 		log.Error(msg, err)
 	}
+}
+
+func optionCheck(options ...interface{}) (string, bool, error) {
+	var err error
+
+	var mode = MODE_R
+	var isForUpdate bool
+
+	for _, v := range options {
+
+		switch v.(type) {
+		case string:
+			str := v.(string)
+			if str == MODE_W || str == MODE_R || str == MODE_BAK {
+				mode = str
+			} else if str == FOR_UPDATE {
+				isForUpdate = true
+			} else {
+				err = errors.New("unknown option!!")
+				break
+			}
+
+		default:
+			err = errors.New("can not check this type!!")
+			log.Error(v)
+			break
+		}
+	}
+	log.Info(mode)
+	log.Info(isForUpdate)
+	return mode, isForUpdate, err
 }

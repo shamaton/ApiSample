@@ -39,7 +39,7 @@ func Test(c *gin.Context) {
 	ctx := c.Value("globalContext").(context.Context)
 
 	// データをselect
-	res := model.Find(c, 3)
+	res := model.Find(c, 3, DBI.MODE_R, DBI.FOR_UPDATE)
 	log.Info(res)
 
 	// use redis

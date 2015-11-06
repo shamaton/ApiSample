@@ -1,9 +1,9 @@
 package model
 
 import (
-	"log"
 	"sample/DBI"
 
+	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 )
 
@@ -23,8 +23,13 @@ var (
 	m modelBase = modelBase{shard: true}
 )
 
-func Find(c *gin.Context, userId int) User {
-	h, err := DBI.GetDBConnection(c, "user", DBI.MODE_R)
+func Find(c *gin.Context, userId int, options ...interface{}) User {
+
+	h, err := DBI.GetDBConnection(c, "user", options...)
+	if err != nil {
+		log.Error(err)
+		return User{}
+	}
 
 	// データをselect
 	var user = User{Id: userId}
@@ -41,6 +46,6 @@ func Find(c *gin.Context, userId int) User {
 // エラー表示
 func checkErr(err error, msg string) {
 	if err != nil {
-		log.Fatalln(msg, err)
+		log.Error(msg, err)
 	}
 }
