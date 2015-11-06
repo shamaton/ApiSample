@@ -42,6 +42,10 @@ func Test(c *gin.Context) {
 	res, _ := model.Find(c, 3)
 	log.Info(res)
 
+	// shard_id test
+	shardId, _ := DBI.GetShardId(c, DBI.USER, 2)
+	log.Info(shardId)
+
 	// use redis
 	redisTest(ctx)
 

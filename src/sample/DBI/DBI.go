@@ -202,33 +202,43 @@ func GetDBConnection(c *gin.Context, tableName string, options ...interface{}) (
 }
 
 func getDBShardConnection(c *gin.Context, mode string) (*xorm.Engine, error) {
-	var err error
-
 	var conn *xorm.Engine
-	gc := c.Value("globalContext").(context.Context)
+	var err error
 
 	// TODO:仮
 	shardId := 1
 
+	shardMap, err := getDBShardMap(c, mode)
+	if err != nil {
+		return nil, err
+	}
+	conn = shardMap[shardId]
+
+	return conn, err
+}
+
+func getDBShardMap(c *gin.Context, mode string) (map[int]*xorm.Engine, error) {
+	var err error
+	var shardMap map[int]*xorm.Engine
+
+	gc := c.Value("globalContext").(context.Context)
+
 	switch mode {
 	case MODE_W:
-		dbShardWMap := gc.Value("dbShardWMap").(map[int]*xorm.Engine)
-		conn = dbShardWMap[shardId]
+		shardMap = gc.Value("dbShardWMap").(map[int]*xorm.Engine)
 
 	case MODE_R:
 		slaveIndex := c.Value("slaveIndex").(int)
 		dbShardRMaps := gc.Value("dbShardRMaps").([]map[int]*xorm.Engine)
-		shardMap := dbShardRMaps[slaveIndex]
-
-		conn = shardMap[shardId]
+		shardMap = dbShardRMaps[slaveIndex]
 
 	case MODE_BAK:
-		// TODO:実装
+	// TODO:実装
 
 	default:
 		err = errors.New("invalid mode!!")
 	}
-	return conn, err
+	return shardMap, err
 }
 
 func GetDBSession(c *gin.Context) (*xorm.Session, error) {
@@ -249,6 +259,47 @@ func GetDBSession(c *gin.Context) (*xorm.Session, error) {
 	}
 
 	return tx, err
+}
+
+type shardType int
+
+const (
+	USER shardType = iota
+	GROUP
+)
+
+// table
+type UserShard struct {
+	Id      int `xorm:"pk"`
+	ShardId int
+}
+
+// とりあえずshard_idを取得する
+func GetShardId(c *gin.Context, st shardType, value int) (int, error) {
+	var shardId int
+	var err error
+
+	gc := c.Value("globalContext").(context.Context)
+
+	switch st {
+	case USER:
+		// TODO:slaveのmasterは複数在るはず
+		conn := gc.Value("dbMasterR").(*xorm.Engine)
+		us := UserShard{Id: value}
+		_, err = conn.Get(&us)
+		if err != nil {
+			err = errors.New("not found user shard id!!")
+			break
+		}
+		shardId = us.ShardId
+
+	case GROUP:
+		// TODO:実装
+	default:
+		err = errors.New("undefined shard type!!")
+	}
+
+	return shardId, err
 }
 
 // 使うslaveを決める
