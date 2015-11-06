@@ -116,6 +116,12 @@ func StartTx(c *gin.Context) {
 	gc := c.Value("globalContext").(context.Context)
 	dbShardWMap := gc.Value("dbShardWMap").(map[int]*xorm.Engine)
 
+	// すでに開始中の場合は何もしない
+	iFace, valid := c.Get("txMap")
+	if valid && iFace != nil {
+		return
+	}
+
 	var txMap = map[int]*xorm.Session{}
 	// txのマップを作成
 	for k, v := range dbShardWMap {
@@ -140,7 +146,7 @@ func Commit(c *gin.Context) {
 func RollBack(c *gin.Context) {
 	iFace, valid := c.Get("txMap")
 
-	if vaålid && iFace != nil {
+	if valid && iFace != nil {
 		txMap := iFace.(map[int]*xorm.Session)
 		for _, v := range txMap {
 			v.Rollback()
@@ -149,7 +155,6 @@ func RollBack(c *gin.Context) {
 	}
 	// errを返す
 }
-
 
 // TODO:不要かも知れない
 func Close(c *gin.Context) {
