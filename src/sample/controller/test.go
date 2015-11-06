@@ -123,15 +123,23 @@ func redisTest(ctx context.Context) {
 	redis_pool := ctx.Value("redis").(*redis.Pool)
 	redis_conn := redis_pool.Get()
 
-	_, e2 := redis_conn.Do("SET", "message", "this is value")
-	if e2 != nil {
-		log.Error("set message", e2)
-	}
+	var err error
 	s, err := redis.String(redis_conn.Do("GET", "message"))
 	if err != nil {
-		log.Error("get message", err)
+		log.Error("get message not found...", err)
 	}
-	log.Info("%#v\n", s)
+	log.Info(s)
+
+	_, err = redis_conn.Do("SET", "message", "this is value")
+	if err != nil {
+		log.Error("set message", err)
+	}
+	_, err = redis_conn.Do("EXPIRE", "message", 10)
+
+	if err != nil {
+		log.Error("error expire ", err)
+	}
+
 }
 
 // エラー表示

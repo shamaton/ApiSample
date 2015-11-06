@@ -133,8 +133,8 @@ func main() {
 	router.Use(Custom())
 
 	// make route
-	//router.POST("/test", controller.Test)
-	router.POST("/test", controller.Test2)
+	router.POST("/test", controller.Test)
+	//router.POST("/test", controller.Test2)
 	router.POST("/token_test", controller.TokenTest)
 
 	err := router.Run(":9999")
