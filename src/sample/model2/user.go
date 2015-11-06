@@ -1,11 +1,10 @@
 package model2
 
 import (
+	"github.com/gin-gonic/gin"
 	"github.com/go-xorm/xorm"
 	"sample/DBI"
-	"github.com/gin-gonic/gin"
 )
-
 
 // table
 type User struct {
@@ -22,7 +21,7 @@ func NewUserRepo(c *gin.Context) UserRepo {
 	tx, _ := DBI.GetDBSession(c)
 	db, _ := DBI.GetDBConnection(c, "user")
 
-	return UserRepoImpl{ db:db, tx:tx }
+	return UserRepoImpl{db: db, tx: tx}
 }
 
 type UserRepoImpl struct {
