@@ -138,16 +138,20 @@ func Commit(c *gin.Context) {
 }
 
 func RollBack(c *gin.Context) {
-	txMap := c.Value("txMap").(map[int]*xorm.Session)
-	for k, v := range txMap {
-		log.Info(k, " commit!!")
-		/*err :=*/ v.Rollback()
-		// txMap[k] = nil
+	iFace, valid := c.Get("txMap")
+
+	if vaålid && iFace != nil {
+		txMap := iFace.(map[int]*xorm.Session)
+		for _, v := range txMap {
+			v.Rollback()
+		}
+		c.Set("txMap", nil)
 	}
-	c.Set("txMap", nil)
 	// errを返す
 }
 
+
+// TODO:不要かも知れない
 func Close(c *gin.Context) {
 	// NOTE:txMapはキーが存在しているため、trueになる
 	iFace, _ := c.Get("txMap")

@@ -47,7 +47,7 @@ func Test(c *gin.Context) {
 
 	// データをupdate
 	DBI.StartTx(c)
-	defer DBI.Close(c)
+	defer DBI.RollBack(c)
 
 	tx, err := DBI.GetDBSession(c)
 	if checkErr(c, err, "begin error") {
