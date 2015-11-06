@@ -39,7 +39,7 @@ func Test(c *gin.Context) {
 	ctx := c.Value("globalContext").(context.Context)
 
 	// データをselect
-	res := model.Find(c, 3, DBI.MODE_R, DBI.FOR_UPDATE)
+	res, _ := model.Find(c, 3)
 	log.Info(res)
 
 	// use redis
@@ -47,14 +47,9 @@ func Test(c *gin.Context) {
 
 	// データをupdate
 	DBI.StartTx(c)
-
-	tx, err := DBI.GetDBSession(c)
-	if checkErr(c, err, "begin error") {
-		return
-	}
 	defer DBI.Close(c)
 
-	err = tx.Begin()
+	tx, err := DBI.GetDBSession(c)
 	if checkErr(c, err, "begin error") {
 		return
 	}

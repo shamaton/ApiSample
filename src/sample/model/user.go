@@ -23,29 +23,41 @@ var (
 	m modelBase = modelBase{shard: true}
 )
 
-func Find(c *gin.Context, userId int, options ...interface{}) User {
+func Find(c *gin.Context, userId int, options ...interface{}) (User, error) {
+	var user User
 
 	h, err := DBI.GetDBConnection(c, "user", options...)
 	if err != nil {
-		log.Error(err)
-		return User{}
+		return user, err
 	}
 
 	// データをselect
-	var user = User{Id: userId}
+	user.Id = userId
 	_, err = h.Get(&user)
 
 	//var user User
 	//_, err := h.Id(userId).Get(&user)
 
-	checkErr(err, "not found data!")
-	return user
+	return user, err
 
 }
 
-// エラー表示
-func checkErr(err error, msg string) {
+func FindForUpdate(c *gin.Context, userId int, options ...interface{}) (User, error) {
+	var user User
+
+	tx, err := DBI.GetDBSession(c)
 	if err != nil {
-		log.Error(msg, err)
+		return user, err
 	}
+
+	var u []User
+	err = tx.Where("id = ?", userId).ForUpdate().Find(&u)
+	if err != nil {
+		log.Error(err)
+		return user, err
+	}
+
+	user = u[0]
+
+	return user, err
 }
