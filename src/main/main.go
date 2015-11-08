@@ -15,6 +15,7 @@ import (
 	"github.com/garyburd/redigo/redis"
 	"math/rand"
 	"os"
+	"sample/shamoto/core"
 )
 
 // global
@@ -136,6 +137,9 @@ func main() {
 	router.POST("/test", controller.Test)
 	//router.POST("/test", controller.Test2)
 	router.POST("/token_test", controller.TokenTest)
+
+	core.InitDb()
+	router.GET("/shamoto", controller.Shamoto)
 
 	err := router.Run(":9999")
 
