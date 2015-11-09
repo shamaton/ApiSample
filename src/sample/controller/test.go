@@ -41,16 +41,6 @@ func Test(c *gin.Context) {
 	user, _ := userRepo.FindByID(c, 3)
 	log.Info(user)
 
-	// shard_id test
-	shardRepo := model.NewShardRepo()
-	shardId, _ := shardRepo.FindShardIdByUserId(c, 2)
-	log.Info(shardId)
-
-	dbRepo := model.NewDbTableConfRepo()
-	vvv, _ := dbRepo.Find(c, "user")
-	log.Info(vvv)
-	log.Info(vvv.IsUseTypeShard())
-
 	// use redis
 	redisTest(ctx)
 
