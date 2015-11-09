@@ -1,49 +1,35 @@
 package model
 
-import "log"
+import (
+	"sample/shamoto/core"
 
-type modelBase struct {
-	pks   []string
-	shard bool
+	builder "github.com/Masterminds/squirrel"
+	log "github.com/cihub/seelog"
+	"reflect"
+)
+
+// base
+//////////////////////////////
+type Base interface {
+	Find(interface{}, builder.SelectBuilder) error
 }
 
-func (m *modelBase) SelectByPk() {
-	log.Println("call select by pk")
+type base struct {
 }
 
-/*
-func ForUpdate
-*/
+func (b *base) Find(holder interface{}, sb builder.SelectBuilder) error {
+	val := reflect.ValueOf(holder).Elem()
 
-/*
-// shardを判断して返す, falseの場合masterをそのまま返す
-func (m *modelBase) GetDBHandle(ctx context.Context, shardKey int, tableName string, mode string) *gorp.DbMap {
-  // db table conf参照
-  tableConf := ctx.Value("DB").(*gorp.DbMap)
+	for i := 0; i < val.NumField(); i++ {
+		valueField := val.Field(i)
+		typeField := val.Type().Field(i)
+		tag := typeField.Tag
 
-  // type:userの場合shardのマスタから取得する
-  shardId := 1//GetUserShard(shardKey) //tableConf.Select(&userShard, "select user_id, shard_id from user_shard", shardKey)
+		log.Infof("Field Name: %s,\t Field Value: %v,\t Tag Value: %s\n", typeField.Name, valueField.Interface(), tag.Get("tag_name"))
+	}
 
-  // type:groupの場合は計算する
-  shardId = shardKey % 4
-
-  var connDb *gorp.DbMap
-
-  switch mode {
-  case MODE_W:
-
-  }
-
-	return connDb
+	sql, args, _ := sb.ToSql()
+	dbMap := core.GetDB()
+	err := dbMap.SelectOne(holder, sql, args...)
+	return err
 }
-*/
-
-/*
-func (m *modelBase) Select(db interface{}, holder interface{}, query string, args... interface{}) {
-  // dbmap or tx
-  switch dbi = db.(type) {
-  case (*gorp.DbMap):
-
-  }
-}
-*/

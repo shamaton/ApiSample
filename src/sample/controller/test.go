@@ -13,7 +13,6 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
-	"github.com/go-xorm/core"
 	"golang.org/x/net/context"
 )
 
@@ -39,8 +38,9 @@ func Test(c *gin.Context) {
 	ctx := c.Value("globalContext").(context.Context)
 
 	// データをselect
-	res, _ := model.Find(c, 3)
-	log.Info(res)
+	userRepo := model.NewUserRepo()
+	user, _ := userRepo.FindByID(c, 3)
+	log.Info(user)
 
 	// shard_id test
 	shardId, _ := DBI.GetShardId(c, DBI.USER, 2)
@@ -49,33 +49,35 @@ func Test(c *gin.Context) {
 	// use redis
 	redisTest(ctx)
 
-	// データをupdate
-	DBI.StartTx(c)
-	defer DBI.RollBack(c)
+	/*
+		// データをupdate
+		DBI.StartTx(c)
+		defer DBI.RollBack(c)
 
-	tx, err := DBI.GetDBSession(c)
-	if checkErr(c, err, "begin error") {
-		return
-	}
+		tx, err := DBI.GetDBSession(c)
+		if checkErr(c, err, "begin error") {
+			return
+		}
 
-	var u []model.User
-	err = tx.Where("id = ?", 3).ForUpdate().Find(&u)
-	if checkErr(c, err, "user not found") {
-		return
-	}
+		var u []model.User
+		err = tx.Where("id = ?", 3).ForUpdate().Find(&u)
+		if checkErr(c, err, "user not found") {
+			return
+		}
 
-	user := u[0]
-	user.Score += 1
+		user := u[0]
+		user.Score += 1
 
-	//time.Sleep(3 * time.Second)
+		//time.Sleep(3 * time.Second)
 
-	//res, e := session.Id(user.Id).Cols("score").Update(&user) // 単一 PK
-	_, err = tx.Id(core.PK{user.Id, user.Name}).Update(&user) // 複合PK
-	if checkErr(c, err, "update error") {
-		return
-	}
+		//res, e := session.Id(user.Id).Cols("score").Update(&user) // 単一 PK
+		_, err = tx.Id(core.PK{user.Id, user.Name}).Update(&user) // 複合PK
+		if checkErr(c, err, "update error") {
+			return
+		}
 
-	DBI.Commit(c)
+		DBI.Commit(c)
+	*/
 
 	/*
 		err = session.Commit()
@@ -83,7 +85,7 @@ func Test(c *gin.Context) {
 			return
 		}*/
 
-	c.JSON(http.StatusOK, &user)
+	c.JSON(http.StatusOK, user)
 }
 
 func TokenTest(c *gin.Context) {

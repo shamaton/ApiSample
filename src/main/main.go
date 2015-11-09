@@ -114,6 +114,7 @@ func loadGameConfig() *gameConf.GameConfig {
 }
 
 func main() {
+	var err error
 	// context
 	ctx = context.Background()
 
@@ -124,7 +125,11 @@ func main() {
 	ctx = context.WithValue(ctx, "gameConf", gameConf)
 
 	// db
-	ctx = DBI.BuildInstances(ctx)
+	ctx, err = DBI.BuildInstances(ctx)
+	if err != nil {
+		log.Critical("init DB failed!!")
+		os.Exit(1)
+	}
 
 	// redis
 	redis_pool := newPool(gameConf)
@@ -140,7 +145,7 @@ func main() {
 	core.InitDb()
 	router.GET("/shamoto", controller.Shamoto)
 
-	err := router.Run(":9999")
+	err = router.Run(":9999")
 
 	// 存在しないルート時
 	if err != nil {

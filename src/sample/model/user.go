@@ -1,63 +1,35 @@
 package model
 
 import (
-	"sample/DBI"
-
-	log "github.com/cihub/seelog"
+	builder "github.com/Masterminds/squirrel"
 	"github.com/gin-gonic/gin"
 )
 
 type User struct {
-	Id    int    `xorm:"pk"`
-	Name  string `xorm:"pk"`
-	Score int
+	Id    int32
+	Name  string
+	Score int32
 	//Hoge int32   //`db:"score, [primarykey, autoincrement]"` 変数名とカラム名が異なる場合JSON的に書ける
 }
 
-type UserTable struct {
-	*User
-	*modelBase
+// user
+/////////////////////////////
+type UserRepo interface {
+	FindByID(*gin.Context, int) (*User, error)
 }
 
-var (
-	m modelBase = modelBase{shard: true}
-)
-
-func Find(c *gin.Context, userId int, options ...interface{}) (User, error) {
-	var user User
-
-	h, err := DBI.GetDBConnection(c, "user", options...)
-	if err != nil {
-		return user, err
-	}
-
-	// データをselect
-	user.Id = userId
-	_, err = h.Get(&user)
-
-	//var user User
-	//_, err := h.Id(userId).Get(&user)
-
-	return user, err
-
+func NewUserRepo() UserRepo {
+	b := &base{}
+	return UserRepoImpl{b}
 }
 
-func FindForUpdate(c *gin.Context, userId int, options ...interface{}) (User, error) {
-	var user User
+type UserRepoImpl struct {
+	*base
+}
 
-	tx, err := DBI.GetDBSession(c)
-	if err != nil {
-		return user, err
-	}
-
-	var u []User
-	err = tx.Where("id = ?", userId).ForUpdate().Find(&u)
-	if err != nil {
-		log.Error(err)
-		return user, err
-	}
-
-	user = u[0]
-
+func (r UserRepoImpl) FindByID(c *gin.Context, id int) (*User, error) {
+	var user = new(User)
+	sb := builder.Select("id, name, score").From("user").Where("id = ?", id)
+	err := r.Find(user, sb)
 	return user, err
 }

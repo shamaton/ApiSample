@@ -333,16 +333,20 @@ func GetShardId(c *gin.Context, st shardType, value int) (int, error) {
 	var shardId int
 	var err error
 
-	gc := c.Value("globalContext").(context.Context)
-
 	switch st {
 	case USER:
-		// TODO:slaveのmasterは複数在るはず
-		conn := gc.Value("dbMasterR").(*gorp.DbMap)
+		// ハンドル取得
+		conn, err := getDBMasterConnection(c, MODE_R)
+		if err != nil {
+			log.Error("not found master connection!!")
+			break
+		}
+
+		// user_shardを検索
 		us := UserShard{Id: value}
 		_, err = conn.Get(&us)
 		if err != nil {
-			err = errors.New("not found user shard id!!")
+			log.Info("not found user shard id")
 			break
 		}
 		shardId = us.ShardId
