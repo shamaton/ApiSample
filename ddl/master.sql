@@ -13,7 +13,8 @@ DROP TABLE IF EXISTS `db_table_conf`;
 CREATE TABLE `db_table_conf` (
   id bigint(20) unsigned NOT NULL,
   table_name varchar(255) NOT NULL,
-  shard_type int(11) unsigned NOT NULL COMMENT '1:master 2:shard',
+  use_type int(11) unsigned NOT NULL COMMENT '1:master 2:shard',
+  shard_type int(11) unsigned NOT NULL COMMENT '0:none 1:user 2:group(TBD...)',
   PRIMARY KEY (`id`),
   UNIQUE KEY (`table_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='table conf master';
@@ -23,7 +24,7 @@ INSERT INTO user_shard VALUES (1, 1);
 INSERT INTO user_shard VALUES (2, 2);
 INSERT INTO user_shard VALUES (3, 1);
 
-INSERT INTO db_table_conf VALUES (1, "db_table_conf", 1);
-INSERT INTO db_table_conf VALUES (2, "user_shard", 1);
-INSERT INTO db_table_conf VALUES (3, "user", 2);
+INSERT INTO db_table_conf VALUES (1, "db_table_conf", 1, 0);
+INSERT INTO db_table_conf VALUES (2, "user_shard", 1, 0);
+INSERT INTO db_table_conf VALUES (3, "user", 2, 1);
 COMMIT;
