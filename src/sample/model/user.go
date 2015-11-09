@@ -30,6 +30,6 @@ type UserRepoImpl struct {
 func (r UserRepoImpl) FindByID(c *gin.Context, id int) (*User, error) {
 	var user = new(User)
 	sb := builder.Select("id, name, score").From("user").Where("id = ?", id)
-	err := r.Find(user, sb)
+	err := r.Find(c, user, sb)
 	return user, err
 }

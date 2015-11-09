@@ -1,23 +1,23 @@
 package model
 
 import (
-	"sample/shamoto/core"
-
 	builder "github.com/Masterminds/squirrel"
 	log "github.com/cihub/seelog"
+	"github.com/gin-gonic/gin"
 	"reflect"
+	"sample/DBI"
 )
 
 // base
 //////////////////////////////
 type Base interface {
-	Find(interface{}, builder.SelectBuilder) error
+	Find(*gin.Context, interface{}, builder.SelectBuilder) error
 }
 
 type base struct {
 }
 
-func (b *base) Find(holder interface{}, sb builder.SelectBuilder) error {
+func (b *base) Find(c *gin.Context, holder interface{}, sb builder.SelectBuilder) error {
 	val := reflect.ValueOf(holder).Elem()
 
 	for i := 0; i < val.NumField(); i++ {
@@ -29,7 +29,12 @@ func (b *base) Find(holder interface{}, sb builder.SelectBuilder) error {
 	}
 
 	sql, args, _ := sb.ToSql()
-	dbMap := core.GetDB()
-	err := dbMap.SelectOne(holder, sql, args...)
+	dbMap, err := DBI.GetDBConnection(c, "table_name")
+	if err != nil {
+		log.Error("db error!!")
+		return err
+	}
+
+	err = dbMap.SelectOne(holder, sql, args...)
 	return err
 }
