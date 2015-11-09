@@ -2,7 +2,6 @@ package controller
 
 import (
 	"net/http"
-	"sample/DBI"
 	"sample/model"
 
 	"crypto/hmac"
@@ -43,7 +42,8 @@ func Test(c *gin.Context) {
 	log.Info(user)
 
 	// shard_id test
-	shardId, _ := DBI.GetShardId(c, DBI.USER, 2)
+	shardRepo := model.NewUserShardRepo()
+	shardId, _ := shardRepo.Find(c, model.USER, 2)
 	log.Info(shardId)
 
 	// use redis

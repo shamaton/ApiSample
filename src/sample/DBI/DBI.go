@@ -230,7 +230,7 @@ func GetDBConnection(c *gin.Context, tableName string, options ...interface{}) (
 	return conn, err
 }
 
-func getDBMasterConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
+func GetDBMasterConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
 	var conn *gorp.DbMap
 	var err error
 
@@ -250,6 +250,11 @@ func getDBMasterConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
 
 	default:
 		err = errors.New("invalid mode!!")
+	}
+
+	//
+	if conn == nil {
+		err = errors.New("connection is nil!!")
 	}
 
 	return conn, err
@@ -313,51 +318,6 @@ func GetDBSession(c *gin.Context) (*gorp.Transaction, error) {
 	}
 
 	return tx, err
-}
-
-type shardType int
-
-const (
-	USER shardType = iota
-	GROUP
-)
-
-// table
-type UserShard struct {
-	Id      int `xorm:"pk"`
-	ShardId int
-}
-
-// とりあえずshard_idを取得する
-func GetShardId(c *gin.Context, st shardType, value int) (int, error) {
-	var shardId int
-	var err error
-
-	switch st {
-	case USER:
-		// ハンドル取得
-		conn, err := getDBMasterConnection(c, MODE_R)
-		if err != nil {
-			log.Error("not found master connection!!")
-			break
-		}
-
-		// user_shardを検索
-		us := UserShard{Id: value}
-		_, err = conn.Get(&us)
-		if err != nil {
-			log.Info("not found user shard id")
-			break
-		}
-		shardId = us.ShardId
-
-	case GROUP:
-		// TODO:実装
-	default:
-		err = errors.New("undefined shard type!!")
-	}
-
-	return shardId, err
 }
 
 // 使うslaveを決める
