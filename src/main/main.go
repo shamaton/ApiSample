@@ -1,9 +1,6 @@
 package main
 
 import (
-	"sample/DBI"
-	"sample/conf/gameConf"
-	"sample/controller"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -15,7 +12,10 @@ import (
 	"github.com/garyburd/redigo/redis"
 	"math/rand"
 	"os"
-	"sample/shamoto/core"
+
+	"sample/DBI"
+	"sample/conf/gameConf"
+	"sample/controller"
 )
 
 // global
@@ -142,7 +142,6 @@ func main() {
 	router.POST("/test", controller.Test)
 	router.POST("/token_test", controller.TokenTest)
 
-	core.InitDb()
 	router.GET("/shamoto", controller.Shamoto)
 
 	err = router.Run(":9999")
