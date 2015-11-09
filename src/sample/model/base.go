@@ -20,19 +20,20 @@ type base struct {
 	table string
 }
 
-func (b *base) Find(c *gin.Context, holder interface{}, sb builder.SelectBuilder) error {
+func (b *base) Find(c *gin.Context, holder interface{}) error {
 
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
 	log.Info(dbTableConf)
 
-	// holderからカラム情報を取得
+	// holder(table struct)からカラム情報を取得
 	var columns []string
-	var pkKeys []string
-	var pkValues []interface{}
-	var pkMap = builder.Eq{}
 	var shardKey interface{}
+
+	// pkはwhere条件に必ず使う
+	var pkMap = builder.Eq{}
+
 	val := reflect.ValueOf(holder).Elem()
 	for i := 0; i < val.NumField(); i++ {
 		valueField := val.Field(i)
@@ -45,8 +46,6 @@ func (b *base) Find(c *gin.Context, holder interface{}, sb builder.SelectBuilder
 
 		// プライマリキー
 		if tag.Get("base") == "pk" {
-			pkKeys = append(pkKeys, column)
-			pkValues = append(pkValues, valueField.Interface())
 			pkMap[column] = valueField.Interface()
 		}
 
@@ -60,8 +59,6 @@ func (b *base) Find(c *gin.Context, holder interface{}, sb builder.SelectBuilder
 			log.Debug("shardkey : ", typeField.Name, " : ", shardKey)
 		}
 	}
-
-	log.Debug("pks ", pkKeys, " values ", pkValues)
 
 	// shardの場合、shard_idを取得
 	if dbTableConf.IsUseTypeShard() {
@@ -82,18 +79,20 @@ func (b *base) Find(c *gin.Context, holder interface{}, sb builder.SelectBuilder
 
 	// SQL生成
 	columnStr := strings.Join(columns, ",")
-	log.Debug(columnStr)
 
-	whereStr := ""
-	for i, v := range pkKeys {
-		if i != 0 {
-			whereStr += " AND "
-		}
-		whereStr += v + " = ?"
+	sql, args, err := builder.Select(columnStr).From(b.table).Where(pkMap).ToSql()
+
+	dbMap, err := DBI.GetDBConnection(c, "table_name")
+	if err != nil {
+		log.Error("db error!!")
+		return err
 	}
 
-	testb, testa, _ := builder.Select(columnStr).From(b.table).Where(pkMap).ToSql()
-	log.Debug(testa, " : ", testb)
+	err = dbMap.SelectOne(holder, sql, args...)
+	return err
+}
+
+func (b *base) FindBySelectBuilder(c *gin.Context, holder interface{}, sb builder.SelectBuilder, isForUpdate bool) error {
 
 	sql, args, _ := sb.ToSql()
 	dbMap, err := DBI.GetDBConnection(c, "table_name")
@@ -105,34 +104,3 @@ func (b *base) Find(c *gin.Context, holder interface{}, sb builder.SelectBuilder
 	err = dbMap.SelectOne(holder, sql, args...)
 	return err
 }
-
-/*
-
-func (b *base) Find(c *gin.Context, holder interface{}, sb builder.SelectBuilder) error {
-	val := reflect.ValueOf(holder).Elem()
-
-	for i := 0; i < val.NumField(); i++ {
-		valueField := val.Field(i)
-		typeField := val.Type().Field(i)
-		tag := typeField.Tag
-
-		log.Infof("Field Name: %s,\t Field Value: %v,\t Tag Value: %s\n", typeField.Name, valueField.Interface(), tag.Get("db"))
-	}
-	// db_table_confから属性を把握
-	dbTableConfRepo := NewDbTableConfRepo()
-	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
-	log.Info(dbTableConf)
-
-	// shardの場合、shard_idを取得
-
-	sql, args, _ := sb.ToSql()
-	dbMap, err := DBI.GetDBConnection(c, "table_name")
-	if err != nil {
-		log.Error("db error!!")
-		return err
-	}
-
-	err = dbMap.SelectOne(holder, sql, args...)
-	return err
-}
-*/

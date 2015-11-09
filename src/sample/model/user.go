@@ -1,7 +1,6 @@
 package model
 
 import (
-	builder "github.com/Masterminds/squirrel"
 	"github.com/gin-gonic/gin"
 )
 
@@ -9,7 +8,6 @@ type User struct {
 	Id    int `base:"pk" shard:"true"`
 	Name  string
 	Score int
-	//Hoge int32   //`db:"score, [primarykey, autoincrement]"` 変数名とカラム名が異なる場合JSON的に書ける
 }
 
 // user
@@ -29,7 +27,7 @@ type UserRepoImpl struct {
 
 func (r UserRepoImpl) FindByID(c *gin.Context, id int) (*User, error) {
 	var user = new(User)
-	sb := builder.Select("id, name, score").From("user").Where("id = ?", id)
-	err := r.Find(c, user, sb)
+	user.Id = id
+	err := r.Find(c, user)
 	return user, err
 }
