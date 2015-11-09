@@ -6,9 +6,9 @@ import (
 )
 
 type User struct {
-	Id    int32
+	Id    int `base:"pk" shard:"true"`
 	Name  string
-	Score int32
+	Score int
 	//Hoge int32   //`db:"score, [primarykey, autoincrement]"` 変数名とカラム名が異なる場合JSON的に書ける
 }
 
@@ -19,7 +19,7 @@ type UserRepo interface {
 }
 
 func NewUserRepo() UserRepo {
-	b := &base{}
+	b := &base{table: "user"}
 	return UserRepoImpl{b}
 }
 
