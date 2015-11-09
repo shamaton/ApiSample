@@ -19,6 +19,7 @@ type ServerConfig struct {
 type SlaveServer struct {
 	Weight int    `toml:"weight"`
 	Host   string `toml:"host"`
+	Port   string `toml:"port"`
 }
 
 type DbConfig struct {

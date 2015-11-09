@@ -5,10 +5,12 @@ port = "3306"
   [[server.slave]]
   weight = 1
   host = "localhost"
+  port = "3306"
 
   [[server.slave]]
   weight = 1
   host = "localhost"
+  port = "3306"
 
 [db]
 user = "game"
