@@ -8,7 +8,7 @@ cd ${DIR}
 # go fmt
 
 echo "go fmt..."
-for f in `git diff --name-only | grep '.go$' `;
+for f in `git diff HEAD --name-status | grep "^M\|^A" | cut -f2 | grep '.go$' `;
 do
   go fmt ./${f};
 done
