@@ -65,11 +65,11 @@ func Custom() gin.HandlerFunc {
 
 		// リクエスト後処理
 		latency := time.Since(t)
-		log.Info(latency)
+		log.Info("latency : ", latency)
 
 		// access the status we are sending
-		status := c.Writer.Status()
-		log.Info(status)
+		// status := c.Writer.Status()
+		// log.Info(status)
 	}
 }
 

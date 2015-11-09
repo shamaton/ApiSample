@@ -5,10 +5,9 @@ package model
  */
 
 import (
-
+	builder "github.com/Masterminds/squirrel"
 	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
-	builder "github.com/Masterminds/squirrel"
 
 	"sample/DBI"
 )
@@ -29,9 +28,9 @@ const (
  * @brief テーブル定義
  */
 type DbTableConf struct {
-	Id      int
+	Id        int
 	TableName string `db:"table_name"`
-	ShardType int `db:"shard_type"`
+	ShardType int    `db:"shard_type"`
 }
 
 /**
@@ -96,7 +95,7 @@ func (r DbTableConfRepoImpl) Find(c *gin.Context, tableName string) (*DbTableCon
 	conn, err := DBI.GetDBMasterConnection(c, DBI.MODE_R)
 	if err != nil {
 		log.Error("not found master connection!!")
-		return  row, err
+		return row, err
 	}
 
 	// user_shardを検索
@@ -107,9 +106,6 @@ func (r DbTableConfRepoImpl) Find(c *gin.Context, tableName string) (*DbTableCon
 	}
 
 	err = conn.SelectOne(row, sql, args...)
-	log.Info(sql)
-	log.Info(args)
-	log.Info(row)
 	if err != nil {
 		log.Error("not found db table conf!!")
 	}

@@ -138,8 +138,9 @@ func redisTest(ctx context.Context) {
 	s, err := redis.String(redis_conn.Do("GET", "message"))
 	if err != nil {
 		log.Error("get message not found...", err)
+	} else {
+		log.Info(s)
 	}
-	log.Info(s)
 
 	_, err = redis_conn.Do("SET", "message", "this is value")
 	if err != nil {

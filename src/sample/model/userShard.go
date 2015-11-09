@@ -66,9 +66,6 @@ func (r UserShardRepoImpl) Find(c *gin.Context, st shardingType, value interface
 
 		var us = new(UserShard)
 		err = conn.SelectOne(us, sql, args...)
-		log.Info(sql)
-		log.Info(args)
-		log.Info(us)
 		if err != nil {
 			log.Info("not found user shard id")
 			break
