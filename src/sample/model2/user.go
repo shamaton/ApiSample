@@ -1,5 +1,6 @@
 package model2
 
+/*
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-xorm/xorm"
@@ -38,3 +39,4 @@ func (r UserRepoImpl) FindByID(id int) (*User, error) {
 
 	return user, err
 }
+*/

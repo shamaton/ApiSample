@@ -135,7 +135,6 @@ func main() {
 
 	// make route
 	router.POST("/test", controller.Test)
-	//router.POST("/test", controller.Test2)
 	router.POST("/token_test", controller.TokenTest)
 
 	core.InitDb()
