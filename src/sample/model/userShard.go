@@ -6,22 +6,21 @@ package model
  */
 
 import (
-
-	"github.com/gin-gonic/gin"
-	builder "github.com/Masterminds/squirrel"
-	"sample/DBI"
-	log "github.com/cihub/seelog"
 	"errors"
+	builder "github.com/Masterminds/squirrel"
+	log "github.com/cihub/seelog"
+	"github.com/gin-gonic/gin"
+	"sample/DBI"
 )
 
 /**
  *
  */
 
-type shardType int
+type shardingType int
 
 const (
-	USER shardType = iota
+	USER shardingType = iota
 	GROUP
 )
 
@@ -30,10 +29,11 @@ type UserShard struct {
 	Id      int
 	ShardId int `db:"shard_id"`
 }
+
 // user shard
 /////////////////////////////
 type UserShardRepo interface {
-	Find(*gin.Context, shardType, interface{}) (int, error)
+	Find(*gin.Context, shardingType, interface{}) (int, error)
 }
 
 func NewUserShardRepo() UserShardRepo {
@@ -44,7 +44,7 @@ type UserShardRepoImpl struct {
 }
 
 //
-func (r UserShardRepoImpl) Find(c *gin.Context, st shardType, value interface{}) (int, error) {
+func (r UserShardRepoImpl) Find(c *gin.Context, st shardingType, value interface{}) (int, error) {
 	var shardId int
 	var err error
 
