@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	builder "github.com/Masterminds/squirrel"
 	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
@@ -30,6 +31,7 @@ func (b *base) Find(c *gin.Context, holder interface{}, sb builder.SelectBuilder
 	var columns []string
 	var pkKeys []string
 	var pkValues []interface{}
+	var pkMap = builder.Eq{}
 	var shardKey interface{}
 	val := reflect.ValueOf(holder).Elem()
 	for i := 0; i < val.NumField(); i++ {
@@ -45,31 +47,53 @@ func (b *base) Find(c *gin.Context, holder interface{}, sb builder.SelectBuilder
 		if tag.Get("base") == "pk" {
 			pkKeys = append(pkKeys, column)
 			pkValues = append(pkValues, valueField.Interface())
+			pkMap[column] = valueField.Interface()
 		}
 
 		// shard keyを取得
 		if dbTableConf.IsUseTypeShard() && tag.Get("shard") == "true" {
-			// TODO:2度設定はダメ
+			// 2度設定はダメ
+			if shardKey != nil {
+				return errors.New("multiple shard key not available!!")
+			}
 			shardKey = valueField.Interface()
 			log.Debug("shardkey : ", typeField.Name, " : ", shardKey)
 		}
 	}
-	columnsStr := strings.Join(columns, ",")
-	log.Debug(columnsStr)
+
 	log.Debug("pks ", pkKeys, " values ", pkValues)
 
 	// shardの場合、shard_idを取得
-	// TODO:shard key check
 	if dbTableConf.IsUseTypeShard() {
+		// value check
+		if shardKey == nil {
+			return errors.New("not set shard_key!!")
+		}
+		// 検索
 		repo := NewShardRepo()
-		shardInfo, err := repo.findShardId(c, dbTableConf.ShardType, shardKey)
+		shardId, err := repo.findShardId(c, dbTableConf.ShardType, shardKey)
 		if err != nil {
 			return err
 		}
 
-		log.Debug("shard info : ", shardInfo)
+		log.Debug("shard info : ", shardId)
 
 	}
+
+	// SQL生成
+	columnStr := strings.Join(columns, ",")
+	log.Debug(columnStr)
+
+	whereStr := ""
+	for i, v := range pkKeys {
+		if i != 0 {
+			whereStr += " AND "
+		}
+		whereStr += v + " = ?"
+	}
+
+	testb, testa, _ := builder.Select(columnStr).From(b.table).Where(pkMap).ToSql()
+	log.Debug(testa, " : ", testb)
 
 	sql, args, _ := sb.ToSql()
 	dbMap, err := DBI.GetDBConnection(c, "table_name")
