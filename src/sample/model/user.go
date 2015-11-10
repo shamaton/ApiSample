@@ -13,7 +13,7 @@ type User struct {
 // user
 /////////////////////////////
 type UserRepo interface {
-	FindByID(*gin.Context, int) (*User, error)
+	FindByID(*gin.Context, int, ...interface{}) (*User, error)
 }
 
 func NewUserRepo() UserRepo {
@@ -25,9 +25,9 @@ type UserRepoImpl struct {
 	*base
 }
 
-func (r UserRepoImpl) FindByID(c *gin.Context, id int) (*User, error) {
+func (r UserRepoImpl) FindByID(c *gin.Context, id int, options ...interface{}) (*User, error) {
 	var user = new(User)
 	user.Id = id
-	err := r.Find(c, user)
+	err := r.Find(c, user, options...)
 	return user, err
 }

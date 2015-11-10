@@ -49,6 +49,9 @@ const (
 	txMaster                = "txMaster"
 	txShardMap              = "txShardMap"
 
+	isMasterTxStart = "isMasterTxStart"
+	isShardTxStart  = "isShardTxStart"
+
 	slaveIndex = "slaveIndex"
 )
 
@@ -190,48 +193,166 @@ func DecideUseSlave() int {
 	return slaveWeights[slaveIndex]
 }
 
-func StartTx(c *gin.Context) {
-	gc := c.Value("globalContext").(context.Context)
-	dbShardWMap := gc.Value(dbShardWMap).(map[int]*gorp.DbMap)
+/**
+ * BEGIN function
+ */
+func MasterTxStart(c *gin.Context) error {
+	var err error
 
 	// すでに開始中の場合は何もしない
-	iFace, valid := c.Get(txShardMap)
-	if valid && iFace != nil {
-		return
+	if isTransactonStart(c, isMasterTxStart) {
+		return err
 	}
+
+	// dbハンドル取得
+	gc := c.Value("globalContext").(context.Context)
+	dbMap := gc.Value(dbMasterW).(*gorp.DbMap)
+
+	// transaction start
+	var tx *gorp.Transaction
+	tx, err = dbMap.Begin()
+	if err != nil {
+		return err
+	}
+
+	// リクエストコンテキストに保存
+	c.Set(txMaster, tx)
+	c.Set(isMasterTxStart, true)
+
+	return err
+}
+
+func ShardAllTxStart(c *gin.Context) error {
+	var err error
+
+	// すでに開始中の場合は何もしない
+	if isTransactonStart(c, isShardTxStart) {
+		return err
+	}
+
+	// dbハンドルマップを取得
+	gc := c.Value("globalContext").(context.Context)
+	dbShardWMap := gc.Value(dbShardWMap).(map[int]*gorp.DbMap)
 
 	var txMap = map[int]*gorp.Transaction{}
 	// txのマップを作成
 	for k, v := range dbShardWMap {
 		log.Info(k, " start tx!!")
-		txMap[k], _ = v.Begin()
+		txMap[k], err = v.Begin()
+
+		// エラーが起きた時点でおかしいのでreturn
+		if err != nil {
+			return err
+		}
 	}
+
+	// リクエストコンテキストに保存
 	c.Set(txShardMap, txMap)
-	// errを返す
+	c.Set(isShardTxStart, true)
+
+	return err
 }
 
-func Commit(c *gin.Context) {
-	txMap := c.Value(txShardMap).(map[int]*gorp.Transaction)
-	for k, v := range txMap {
-		log.Info(k, " commit!!")
-		/*err :=*/ v.Commit()
-		// txMap[k] = nil
+/**
+ * COMMIT function
+ */
+func Commit(c *gin.Context) error {
+	err := masterCommit(c)
+	err = shardCommit(c)
+	return err
+}
+
+func masterCommit(c *gin.Context) error {
+	var err error
+	iFace, valid := c.Get(txMaster)
+
+	if valid && iFace != nil {
+		tx := iFace.(*gorp.Transaction)
+		err = tx.Commit()
+
+		// エラーじゃなければ削除
+		if err == nil {
+			c.Set(txMaster, nil)
+		}
 	}
-	c.Set(txShardMap, nil)
-	// errを返す
+	return err
 }
 
-func RollBack(c *gin.Context) {
+func shardCommit(c *gin.Context) error {
+	var err error
+	var hasError = false
+
 	iFace, valid := c.Get(txShardMap)
 
 	if valid && iFace != nil {
+		// 取得してすべてcommitする
 		txMap := iFace.(map[int]*gorp.Transaction)
-		for _, v := range txMap {
-			v.Rollback()
+		for k, v := range txMap {
+			log.Debug(k, " commit!!")
+			err = v.Commit()
+			// 正常な場合、削除する
+			if err == nil {
+				delete(txMap, k)
+			}
 		}
-		c.Set(txShardMap, nil)
+
+		// エラーが起きてなければ削除
+		if !hasError {
+			c.Set(txShardMap, nil)
+		}
 	}
-	// errを返す
+	return err
+}
+
+/**
+ * ROLLBACK function
+ */
+func RollBack(c *gin.Context) error {
+	err := masterRollback(c)
+	err = shardRollback(c)
+	return err
+}
+
+func masterRollback(c *gin.Context) error {
+	var err error
+	iFace, valid := c.Get(txMaster)
+
+	if valid && iFace != nil {
+		tx := iFace.(*gorp.Transaction)
+		err = tx.Rollback()
+
+		// エラーじゃなければ削除
+		if err == nil {
+			c.Set(txMaster, nil)
+		}
+	}
+	return err
+}
+
+func shardRollback(c *gin.Context) error {
+	var err error
+	var hasError = false
+
+	iFace, valid := c.Get(txShardMap)
+
+	if valid && iFace != nil {
+		// 取得してすべてrollbackする
+		txMap := iFace.(map[int]*gorp.Transaction)
+		for k, v := range txMap {
+			log.Debug(k, " rollback!!")
+			err = v.Rollback()
+			// 正常な場合、削除する
+			if err == nil {
+				delete(txMap, k)
+			}
+		}
+
+		// エラーが起きてなければ削除
+		if !hasError {
+			c.Set(txShardMap, nil)
+		}
+	}
+	return err
 }
 
 /**
@@ -244,13 +365,33 @@ func GetTransaction(c *gin.Context, isShard bool, shardId int) (*gorp.Transactio
 	switch isShard {
 	case true:
 		// shard
+		// トランザクションを開始してない場合、開始する
+		if !isTransactonStart(c, isShardTxStart) {
+			err = ShardAllTxStart(c)
+
+			if err != nil {
+				log.Error("shard transaction start failed!!")
+				return tx, err
+			}
+		}
+		// shard
 		iFace, valid := c.Get(txShardMap)
-		if valid {
+		if valid && iFace != nil {
 			sMap := iFace.(map[int]*gorp.Transaction)
 			tx = sMap[shardId]
 		}
 
 	case false:
+		// master
+		// トランザクションを開始してない場合、開始する
+		if isTransactonStart(c, isMasterTxStart) {
+			err = MasterTxStart(c)
+
+			if err != nil {
+				log.Error("master transaction start failed!!")
+				return tx, err
+			}
+		}
 		// master
 		iFace, valid := c.Get(txMaster)
 		if valid && iFace != nil {
@@ -267,6 +408,14 @@ func GetTransaction(c *gin.Context, isShard bool, shardId int) (*gorp.Transactio
 	}
 
 	return tx, err
+}
+
+func isTransactonStart(c *gin.Context, key string) bool {
+	iFace, valid := c.Get(key)
+	if valid && iFace != nil {
+		return iFace.(bool)
+	}
+	return false
 }
 
 /**

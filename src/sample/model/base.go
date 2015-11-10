@@ -94,11 +94,22 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 	}
 
 	// SQL生成
+	var sb builder.SelectBuilder
 	columnStr := strings.Join(columns, ",")
-	sql, args, err := builder.Select(columnStr).From(b.table).Where(pkMap).ToSql()
+	sb = builder.Select(columnStr).From(b.table).Where(pkMap)
+	if isForUpdate {
+		sb = sb.Suffix("FOR UPDATE")
+	}
+	sql, args, err := sb.ToSql()
 
 	// とりあえず分けてみる
 	if isForUpdate {
+		tx, err := DBI.GetTransaction(c, dbTableConf.IsUseTypeShard(), shardId)
+		if err != nil {
+			log.Error("transaction error!!")
+			return err
+		}
+		err = tx.SelectOne(holder, sql, args...)
 	} else {
 		dbMap, err := DBI.GetDBConnection(c, mode, dbTableConf.IsUseTypeShard(), shardId)
 		if err != nil {

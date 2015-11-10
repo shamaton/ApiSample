@@ -14,6 +14,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/k0kubun/pp"
 	"golang.org/x/net/context"
+	db "sample/DBI"
+	"time"
 )
 
 // JSON from POST
@@ -28,6 +30,7 @@ type postData struct {
 }
 
 func Test(c *gin.Context) {
+	defer db.RollBack(c)
 
 	var json PostJSON
 	err := c.BindJSON(&json)
@@ -48,6 +51,13 @@ func Test(c *gin.Context) {
 
 	// use redis
 	redisTest(ctx)
+
+	// update test
+	user, err = userRepo.FindByID(c, 3, db.FOR_UPDATE)
+	if checkErr(c, err, "user for update error") {
+		return
+	}
+	time.Sleep(10 * time.Second)
 
 	/*
 		// データをupdate
@@ -84,6 +94,7 @@ func Test(c *gin.Context) {
 		if checkErr(c, err, "commit error") {
 			return
 		}*/
+	db.Commit(c)
 
 	c.JSON(http.StatusOK, user)
 }
