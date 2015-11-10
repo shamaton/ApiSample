@@ -12,6 +12,7 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
+	"github.com/k0kubun/pp"
 	"golang.org/x/net/context"
 )
 
@@ -39,7 +40,8 @@ func Test(c *gin.Context) {
 	// データをselect
 	userRepo := model.NewUserRepo()
 	user, _ := userRepo.FindByID(c, 3)
-	log.Info(user)
+
+	log.Debug(pp.Print(user))
 
 	// use redis
 	redisTest(ctx)
