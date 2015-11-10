@@ -12,7 +12,7 @@ CREATE TABLE `user` (
 ) ENGINE=InnoDB;
 
 BEGIN;
-INSERT INTO user VALUES (1, "aaa", 100, 123, 123);
-INSERT INTO user VALUES (2, "bbb", 70, 123, 123);
-INSERT INTO user VALUES (3, "ccc", 50, 123, 123);
+INSERT INTO game_shard_1.user VALUES (1, "aaa", 100, 123, 123) ON DUPLICATE KEY UPDATE id = id;
+INSERT INTO game_shard_2.user VALUES (2, "bbb", 70, 123, 123) ON DUPLICATE KEY UPDATE id = id;
+INSERT INTO game_shard_1.user VALUES (3, "ccc", 50, 123, 123) ON DUPLICATE KEY UPDATE id = id;
 COMMIT;
