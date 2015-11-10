@@ -124,6 +124,8 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 	return err
 }
 
+
+
 /*
 func (b *base) FindBySelectBuilder(c *gin.Context, holder interface{}, sb builder.SelectBuilder, isForUpdate bool) error {
 	sql, args, _ := sb.ToSql()
@@ -140,7 +142,7 @@ func (b *base) FindBySelectBuilder(c *gin.Context, holder interface{}, sb builde
 
 /**************************************************************************************************/
 /*!
- *  Find,Creeate,Update,Delete経由のオプションを処理する
+ *  Find,Create,Update,Delete経由のオプションを処理する
  *
  *  \param   options : モード[W,R,BAK] ロック[FOR_UPDATE]
  *  \return  モード、ロックするか、エラー
