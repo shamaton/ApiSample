@@ -57,9 +57,16 @@ func Test(c *gin.Context) {
 	if checkErr(c, err, "user for update error") {
 		return
 	}
-	time.Sleep(10 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	user, err = userRepo.FindByID(c, 2, db.FOR_UPDATE)
+	if checkErr(c, err, "user for update error") {
+		return
+	}
+
+	userRepo.Update(nil)
+	var option = map[string]interface{}{"mode": db.MODE_R, "for_update": 1, "shard_id": 2}
+	user, err = userRepo.FindByID(c, 2, option)
 	if checkErr(c, err, "user for update error") {
 		return
 	}

@@ -14,6 +14,8 @@ import (
 //////////////////////////////
 type Base interface {
 	Find(*gin.Context, interface{}, ...interface{}) error
+
+	Update(map[string]interface{})
 }
 
 type base struct {
@@ -33,7 +35,7 @@ type base struct {
 func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) error {
 
 	// optionsの解析
-	mode, isForUpdate, err := b.optionCheck(options...)
+	mode, isForUpdate, _, _, err := b.optionCheck(options...)
 	if err != nil {
 		log.Error("invalid options set!!")
 		return err
@@ -43,7 +45,6 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
-	log.Info(dbTableConf)
 
 	// holder(table struct)からカラム情報を取得
 	var columns []string
@@ -74,7 +75,6 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 				return errors.New("multiple shard key not available!!")
 			}
 			shardKey = valueField.Interface()
-			log.Debug("shardkey : ", typeField.Name, " : ", shardKey)
 		}
 	}
 
@@ -98,9 +98,6 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 		if err != nil {
 			return err
 		}
-
-		log.Debug("shard info : ", shardId)
-
 	}
 
 	// SQL生成
@@ -134,12 +131,111 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 	return err
 }
 
-func Finds() {
+func (b *base) Finds(c *gin.Context, holders interface{}, options ...interface{}) error {
 
+	mode, isForUpdate, shardKey, shardId, err := b.optionCheck(options...)
+	if err != nil {
+		log.Error("invalid options set!!")
+		return err
+	}
+	log.Debug("mode : ", mode, " | for_update : ", isForUpdate, shardKey, shardId)
+
+	// db_table_confから属性を把握
+	dbTableConfRepo := NewDbTableConfRepo()
+	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+	//log.Debug(dbTableConf)
+
+	// holder(table struct)からカラム情報を取得
+	var columns []string
+
+	// pkはwhere条件に必ず使う
+	var pkMap = builder.Eq{}
+
+	val := reflect.ValueOf(holders).Elem()
+	for i := 0; i < val.NumField(); i++ {
+		valueField := val.Field(i)
+		typeField := val.Type().Field(i)
+		tag := typeField.Tag
+
+		// カラム
+		column := strings.ToLower(typeField.Name)
+		columns = append(columns, column)
+
+		// プライマリキー
+		if tag.Get("base") == "pk" {
+			pkMap[column] = valueField.Interface()
+		}
+
+		// shard keyを取得
+		if dbTableConf.IsUseTypeShard() && tag.Get("shard") == "true" {
+			// 2度設定はダメ
+			if shardKey != nil {
+				return errors.New("multiple shard key not available!!")
+			}
+			shardKey = valueField.Interface()
+			//log.Debug("shardkey : ", typeField.Name, " : ", shardKey)
+		}
+	}
+
+	// pkMapをチェックしておく
+	if len(pkMap) < 1 {
+		err = errors.New("must be set pks in struct!!")
+		log.Error(err)
+		return err
+	}
+
+	// shardの場合、shard_idを取得
+	if dbTableConf.IsUseTypeShard() {
+		// value check
+		if shardKey == nil {
+			return errors.New("not set shard_key!!")
+		}
+		// 検索
+		repo := NewShardRepo()
+		shardId, err = repo.findShardId(c, dbTableConf.ShardType, shardKey)
+		if err != nil {
+			return err
+		}
+
+		//log.Debug("shard info : ", shardId)
+
+	}
+
+	// SQL生成
+	var sb builder.SelectBuilder
+	columnStr := strings.Join(columns, ",")
+	sb = builder.Select(columnStr).From(b.table).Where(pkMap)
+	if isForUpdate {
+		sb = sb.Suffix("FOR UPDATE")
+	}
+	sql, args, err := sb.ToSql()
+
+	// とりあえず分けてみる
+	if isForUpdate {
+		tx, err := db.GetTransaction(c, dbTableConf.IsUseTypeShard(), shardId)
+		if err != nil {
+			log.Error("transaction error!!")
+			return err
+		}
+		// select
+		_, err = tx.Select(holders, sql, args...)
+	} else {
+		dbMap, err := db.GetDBConnection(c, mode, dbTableConf.IsUseTypeShard(), shardId)
+		if err != nil {
+			log.Error("db connection error!!")
+			return err
+		}
+		// select
+		_, err = dbMap.Select(holders, sql, args...)
+	}
+
+	// TODO:デバッグでは通常selectで複数行取得されないことも確認する
+	return err
 }
 
-func Update() {
-
+func (b *base) Update(hoge map[string]interface{}) {
+	log.Debug(hoge)
+	log.Debug("aaaaaa")
 }
 
 func Create() {
@@ -168,15 +264,21 @@ func (b *base) FindBySelectBuilder(c *gin.Context, holder interface{}, sb builde
 /*!
  *  Find,Create,Update,Delete経由のオプションを処理する
  *
+ *  optionMapには mode, for_update, shardKey, shardIdが設定できる
+ *  ここは整理するかもしれない
  *  \param   options : モード[W,R,BAK] ロック[FOR_UPDATE]
  *  \return  モード、ロックするか、エラー
  */
 /**************************************************************************************************/
-func (b *base) optionCheck(options ...interface{}) (string, bool, error) {
+func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, int, error) {
 	var err error
 
 	var mode = db.MODE_R
 	var isForUpdate = false
+	var shardKey interface{}
+	var shardId int
+
+	var optionMap map[string]interface{}
 
 	for _, v := range options {
 
@@ -192,15 +294,65 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, error) {
 				break
 			}
 
+		case map[string]interface{}:
+			// 後で処理する
+			optionMap = v.(map[string]interface{})
+
 		default:
 			err = errors.New("can not check this type!!")
 			log.Error(v)
 			break
 		}
 	}
+
+	// optionMapの解析
+	// TODO:専用のtypeを作成する
+	for k, v := range optionMap {
+
+		switch k {
+		case "mode":
+			str := v.(string)
+			if str == db.MODE_W || str == db.MODE_R || str == db.MODE_BAK {
+				mode = str
+			} else {
+				err = errors.New("invalid mode!!")
+				break
+			}
+
+		case "for_update":
+			isForUpdate = true
+
+		case "shard_key":
+			shardKey = v
+
+		case "shard_id":
+			value, isInt := v.(int)
+			// 型チェック & 範囲チェック
+			if !isInt {
+				err = errors.New("type not integer!!")
+				break
+			} else if value < 1 || value > 2 {
+				// TODO:ちゃんとチェックする
+				err = errors.New("over shard id range!!")
+				break
+			}
+			shardId = v.(int)
+
+		default:
+			err = errors.New("invalid key!!")
+
+		}
+	}
+
+	// shard系は1つのみを想定する
+	if shardKey != nil && shardId > 0 {
+		err = errors.New("can't set shardKey and shardId in optionMap!!")
+		return mode, isForUpdate, shardKey, shardId, err
+	}
+
 	// for updateな場合、MODEは必ずW
 	if isForUpdate {
 		mode = db.MODE_W
 	}
-	return mode, isForUpdate, err
+	return mode, isForUpdate, shardKey, shardId, err
 }

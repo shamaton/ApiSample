@@ -14,6 +14,8 @@ type User struct {
 /////////////////////////////
 type UserRepo interface {
 	FindByID(*gin.Context, int, ...interface{}) (*User, error)
+
+	Update(map[string]interface{})
 }
 
 func NewUserRepo() UserRepo {
