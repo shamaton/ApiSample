@@ -6,7 +6,7 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 	"reflect"
-	"sample/DBI"
+	db "sample/DBI"
 	"strings"
 )
 
@@ -104,14 +104,14 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 
 	// とりあえず分けてみる
 	if isForUpdate {
-		tx, err := DBI.GetTransaction(c, dbTableConf.IsUseTypeShard(), shardId)
+		tx, err := db.GetTransaction(c, dbTableConf.IsUseTypeShard(), shardId)
 		if err != nil {
 			log.Error("transaction error!!")
 			return err
 		}
 		err = tx.SelectOne(holder, sql, args...)
 	} else {
-		dbMap, err := DBI.GetDBConnection(c, mode, dbTableConf.IsUseTypeShard(), shardId)
+		dbMap, err := db.GetDBConnection(c, mode, dbTableConf.IsUseTypeShard(), shardId)
 		if err != nil {
 			log.Error("db connection error!!")
 			return err
@@ -149,7 +149,7 @@ func (b *base) FindBySelectBuilder(c *gin.Context, holder interface{}, sb builde
 func (b *base) optionCheck(options ...interface{}) (string, bool, error) {
 	var err error
 
-	var mode = DBI.MODE_R
+	var mode = db.MODE_R
 	var isForUpdate = false
 
 	for _, v := range options {
@@ -157,9 +157,9 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, error) {
 		switch v.(type) {
 		case string:
 			str := v.(string)
-			if str == DBI.MODE_W || str == DBI.MODE_R || str == DBI.MODE_BAK {
+			if str == db.MODE_W || str == db.MODE_R || str == db.MODE_BAK {
 				mode = str
-			} else if str == DBI.FOR_UPDATE {
+			} else if str == db.FOR_UPDATE {
 				isForUpdate = true
 			} else {
 				err = errors.New("unknown option!!")
@@ -174,7 +174,7 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, error) {
 	}
 	// for updateな場合、MODEは必ずW
 	if isForUpdate {
-		mode = DBI.MODE_W
+		mode = db.MODE_W
 	}
 	return mode, isForUpdate, err
 }
