@@ -234,7 +234,7 @@ func checkErr(err error, msg string) {
 
 //////////////////////
 
-func GetDBConnection2(c *gin.Context, mode string, isShard bool, shardId int) (*gorp.DbMap, error) {
+func GetDBConnection(c *gin.Context, mode string, isShard bool, shardId int) (*gorp.DbMap, error) {
 	var err error
 	var conn *gorp.DbMap
 

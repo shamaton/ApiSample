@@ -100,7 +100,7 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 	// とりあえず分けてみる
 	if isForUpdate {
 	} else {
-		dbMap, err := DBI.GetDBConnection2(c, mode, dbTableConf.IsUseTypeShard(), shardId)
+		dbMap, err := DBI.GetDBConnection(c, mode, dbTableConf.IsUseTypeShard(), shardId)
 		if err != nil {
 			log.Error("db connection error!!")
 			return err
