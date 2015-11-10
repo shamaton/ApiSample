@@ -39,9 +39,12 @@ func Test(c *gin.Context) {
 
 	// データをselect
 	userRepo := model.NewUserRepo()
-	user, _ := userRepo.FindByID(c, 3)
+	user, err := userRepo.FindByID(c, 3)
+	if checkErr(c, err, "user error") {
+		return
+	}
 
-	log.Debug(pp.Print(user))
+	log.Debug(pp.Println(user))
 
 	// use redis
 	redisTest(ctx)

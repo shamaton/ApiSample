@@ -13,14 +13,14 @@ import (
 // base
 //////////////////////////////
 type Base interface {
-	Find(*gin.Context, interface{}, builder.SelectBuilder) error
+	Find(*gin.Context, interface{}, ...interface{}) error
 }
 
 type base struct {
 	table string
 }
 
-func (b *base) Find(c *gin.Context, holder interface{}) error {
+func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) error {
 
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
@@ -60,6 +60,13 @@ func (b *base) Find(c *gin.Context, holder interface{}) error {
 		}
 	}
 
+	// pkMapをチェックしておく
+	if len(pkMap) < 1 {
+		err = errors.New("must be set pks in struct!!")
+		log.Error(err)
+		return err
+	}
+
 	// shardの場合、shard_idを取得
 	if dbTableConf.IsUseTypeShard() {
 		// value check
@@ -87,6 +94,9 @@ func (b *base) Find(c *gin.Context, holder interface{}) error {
 		log.Error("db error!!")
 		return err
 	}
+
+	// TODO:オプションを実装して、適切なDBハンドラを返す
+	// TODO:デバッグでは通常selectで複数行取得されないことも確認する
 
 	err = dbMap.SelectOne(holder, sql, args...)
 	return err
