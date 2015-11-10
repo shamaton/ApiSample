@@ -49,8 +49,15 @@ const (
 	txMaster                = "txMaster"
 	txShardMap              = "txShardMap"
 
-	slaveIndex              = "slaveIndex"
+	slaveIndex = "slaveIndex"
 )
+
+type DBIRepo struct {
+}
+
+func NewDBIRepo() *DBIRepo {
+	return new(DBIRepo)
+}
 
 // masterは1つのハンドラをもち、slaveは複数のハンドラを持つ
 // master
