@@ -109,14 +109,12 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 		err = dbMap.SelectOne(holder, sql, args...)
 	}
 
-	// TODO:オプションを実装して、適切なDBハンドラを返す
 	// TODO:デバッグでは通常selectで複数行取得されないことも確認する
-
 	return err
 }
 
+/*
 func (b *base) FindBySelectBuilder(c *gin.Context, holder interface{}, sb builder.SelectBuilder, isForUpdate bool) error {
-
 	sql, args, _ := sb.ToSql()
 	dbMap, err := DBI.GetDBConnection(c, "table_name")
 	if err != nil {
@@ -127,6 +125,7 @@ func (b *base) FindBySelectBuilder(c *gin.Context, holder interface{}, sb builde
 	err = dbMap.SelectOne(holder, sql, args...)
 	return err
 }
+*/
 
 /**************************************************************************************************/
 /*!
