@@ -59,6 +59,11 @@ func Test(c *gin.Context) {
 	}
 	time.Sleep(10 * time.Second)
 
+	user, err = userRepo.FindByID(c, 2, db.FOR_UPDATE)
+	if checkErr(c, err, "user for update error") {
+		return
+	}
+
 	/*
 		// データをupdate
 		DBI.StartTx(c)

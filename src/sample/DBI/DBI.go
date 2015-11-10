@@ -21,11 +21,7 @@ var (
 	shardIds = [...]int{1, 2}
 )
 
-const (
-	MASTER = iota
-	SHARD
-)
-
+// TODO:この辺ちゃんとする
 const (
 	MODE_W   = "W"   // master
 	MODE_R   = "R"   // slave
@@ -62,14 +58,24 @@ func NewDBIRepo() *DBIRepo {
 	return new(DBIRepo)
 }
 
-// masterは1つのハンドラをもち、slaveは複数のハンドラを持つ
-// master
-//  master *db
-//  shard map[int]*db
-// ----------------
-// slave
-//  master []*db
-//  shard []map[int]*db
+/**************************************************************************************************/
+/*!
+ *  dbハンドラを生成する
+ *
+ *  masterは1つのハンドラをもち、slaveは複数のハンドラを持つ
+ *  master
+ *   master *db
+ *   shard map[int]*db
+ * ----------------
+ *  slave
+ *   master []*db
+ *   shard []map[int]*db
+ *
+ *
+ *  \param   ctx : グローバルなコンテキスト
+ *  \return  ハンドラ登録済みのコンテキスト、エラー
+ */
+/**************************************************************************************************/
 func BuildInstances(ctx context.Context) (context.Context, error) {
 	var err error
 
@@ -196,6 +202,14 @@ func DecideUseSlave() int {
 /**
  * BEGIN function
  */
+/**************************************************************************************************/
+/*!
+ *  masterでトランザクションを開始する
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
 func MasterTxStart(c *gin.Context) error {
 	var err error
 
@@ -222,6 +236,14 @@ func MasterTxStart(c *gin.Context) error {
 	return err
 }
 
+/**************************************************************************************************/
+/*!
+ *  すべてのshardでトランザクションを開始する
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
 func ShardAllTxStart(c *gin.Context) error {
 	var err error
 
@@ -256,12 +278,28 @@ func ShardAllTxStart(c *gin.Context) error {
 /**
  * COMMIT function
  */
+/**************************************************************************************************/
+/*!
+ *  開始した全てのtransactionをcommitする
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
 func Commit(c *gin.Context) error {
 	err := masterCommit(c)
 	err = shardCommit(c)
 	return err
 }
 
+/**************************************************************************************************/
+/*!
+ *  masterの開始したtransactionをcommitする
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
 func masterCommit(c *gin.Context) error {
 	var err error
 	iFace, valid := c.Get(txMaster)
@@ -278,6 +316,14 @@ func masterCommit(c *gin.Context) error {
 	return err
 }
 
+/**************************************************************************************************/
+/*!
+ *  shardの開始したtransactionをcommitする
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
 func shardCommit(c *gin.Context) error {
 	var err error
 	var hasError = false
@@ -307,12 +353,28 @@ func shardCommit(c *gin.Context) error {
 /**
  * ROLLBACK function
  */
+/**************************************************************************************************/
+/*!
+ *  開始した全てのtransactionをrollbackする
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
 func RollBack(c *gin.Context) error {
 	err := masterRollback(c)
 	err = shardRollback(c)
 	return err
 }
 
+/**************************************************************************************************/
+/*!
+ *  masterの開始したtransactionをrollbackする
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
 func masterRollback(c *gin.Context) error {
 	var err error
 	iFace, valid := c.Get(txMaster)
@@ -329,6 +391,14 @@ func masterRollback(c *gin.Context) error {
 	return err
 }
 
+/**************************************************************************************************/
+/*!
+ *  shardの開始したtransactionをrollbackする
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
 func shardRollback(c *gin.Context) error {
 	var err error
 	var hasError = false
@@ -358,6 +428,16 @@ func shardRollback(c *gin.Context) error {
 /**
  * get transaction function
  */
+/**************************************************************************************************/
+/*!
+ *  トランザクションを取得する(開始してない場合、開始する)
+ *
+ *  \param   c       : コンテキスト
+ *  \param   isShard : trueの場合shardのDBハンドルを取得する
+ *  \param   shardId : 存在するshard ID
+ *  \return  トランザクション、エラー
+ */
+/**************************************************************************************************/
 func GetTransaction(c *gin.Context, isShard bool, shardId int) (*gorp.Transaction, error) {
 	var err error
 	var tx *gorp.Transaction
