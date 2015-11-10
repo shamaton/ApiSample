@@ -17,9 +17,19 @@ type Base interface {
 }
 
 type base struct {
-	table string
+	table string //<! テーブル名
 }
 
+/**************************************************************************************************/
+/*!
+ *  pkを利用したfetchを行う
+ *
+ *  \param   c       : コンテキスト
+ *  \param   holder  : テーブルデータ構造体
+ *  \param   options : モード[W,R,BAK] ロック[FOR_UPDATE]
+ *  \return  エラー（正常時はholderにデータを取得する）
+ */
+/**************************************************************************************************/
 func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) error {
 
 	// optionsの解析
@@ -124,7 +134,21 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 	return err
 }
 
+func Finds() {
 
+}
+
+func Update() {
+
+}
+
+func Create() {
+
+}
+
+func Delete() {
+
+}
 
 /*
 func (b *base) FindBySelectBuilder(c *gin.Context, holder interface{}, sb builder.SelectBuilder, isForUpdate bool) error {
