@@ -178,6 +178,18 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
 	return ctx, err
 }
 
+/**************************************************************************************************/
+/*!
+ *  リクエスト中に使用するslaveを決める
+ *
+ *  \return  使用するslaveのindex
+ */
+/**************************************************************************************************/
+func DecideUseSlave() int {
+	slaveIndex := rand.Intn(len(slaveWeights))
+	return slaveWeights[slaveIndex]
+}
+
 func StartTx(c *gin.Context) {
 	gc := c.Value("globalContext").(context.Context)
 	dbShardWMap := gc.Value(dbShardWMap).(map[int]*gorp.DbMap)
@@ -220,19 +232,6 @@ func RollBack(c *gin.Context) {
 		c.Set(txShardMap, nil)
 	}
 	// errを返す
-}
-
-// 使うslaveを決める
-func DecideUseSlave() int {
-	slaveIndex := rand.Intn(len(slaveWeights))
-	return slaveWeights[slaveIndex]
-}
-
-// エラー表示
-func checkErr(err error, msg string) {
-	if err != nil {
-		log.Error(msg, err)
-	}
 }
 
 /**
