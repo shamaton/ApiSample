@@ -22,6 +22,14 @@ type base struct {
 
 func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) error {
 
+	// optionsの解析
+	mode, isForUpdate, err := b.optionCheck(options...)
+	if err != nil {
+		log.Error("invalid options set!!")
+		return err
+	}
+	log.Debug("mode : ", mode, " | for_update : ", isForUpdate)
+
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
@@ -68,6 +76,7 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 	}
 
 	// shardの場合、shard_idを取得
+	var shardId int
 	if dbTableConf.IsUseTypeShard() {
 		// value check
 		if shardKey == nil {
@@ -75,7 +84,7 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 		}
 		// 検索
 		repo := NewShardRepo()
-		shardId, err := repo.findShardId(c, dbTableConf.ShardType, shardKey)
+		shardId, err = repo.findShardId(c, dbTableConf.ShardType, shardKey)
 		if err != nil {
 			return err
 		}
@@ -86,19 +95,23 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 
 	// SQL生成
 	columnStr := strings.Join(columns, ",")
-
 	sql, args, err := builder.Select(columnStr).From(b.table).Where(pkMap).ToSql()
 
-	dbMap, err := DBI.GetDBConnection(c, "table_name")
-	if err != nil {
-		log.Error("db error!!")
-		return err
+	// とりあえず分けてみる
+	if isForUpdate {
+	} else {
+		dbMap, err := DBI.GetDBConnection2(c, mode, dbTableConf.IsUseTypeShard(), shardId)
+		if err != nil {
+			log.Error("db connection error!!")
+			return err
+		}
+		// fetch
+		err = dbMap.SelectOne(holder, sql, args...)
 	}
 
 	// TODO:オプションを実装して、適切なDBハンドラを返す
 	// TODO:デバッグでは通常selectで複数行取得されないことも確認する
 
-	err = dbMap.SelectOne(holder, sql, args...)
 	return err
 }
 
@@ -113,4 +126,45 @@ func (b *base) FindBySelectBuilder(c *gin.Context, holder interface{}, sb builde
 
 	err = dbMap.SelectOne(holder, sql, args...)
 	return err
+}
+
+/**************************************************************************************************/
+/*!
+ *  Find,Creeate,Update,Delete経由のオプションを処理する
+ *
+ *  \param   options : モード[W,R,BAK] ロック[FOR_UPDATE]
+ *  \return  モード、ロックするか、エラー
+ */
+/**************************************************************************************************/
+func (b *base) optionCheck(options ...interface{}) (string, bool, error) {
+	var err error
+
+	var mode = DBI.MODE_R
+	var isForUpdate = false
+
+	for _, v := range options {
+
+		switch v.(type) {
+		case string:
+			str := v.(string)
+			if str == DBI.MODE_W || str == DBI.MODE_R || str == DBI.MODE_BAK {
+				mode = str
+			} else if str == DBI.FOR_UPDATE {
+				isForUpdate = true
+			} else {
+				err = errors.New("unknown option!!")
+				break
+			}
+
+		default:
+			err = errors.New("can not check this type!!")
+			log.Error(v)
+			break
+		}
+	}
+	// for updateな場合、MODEは必ずW
+	if isForUpdate {
+		mode = DBI.MODE_W
+	}
+	return mode, isForUpdate, err
 }

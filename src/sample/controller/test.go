@@ -39,7 +39,7 @@ func Test(c *gin.Context) {
 
 	// データをselect
 	userRepo := model.NewUserRepo()
-	user, err := userRepo.FindByID(c, 3)
+	user, err := userRepo.FindByID(c, 2)
 	if checkErr(c, err, "user error") {
 		return
 	}

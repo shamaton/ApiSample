@@ -217,7 +217,7 @@ func GetDBConnection(c *gin.Context, tableName string, options ...interface{}) (
 		gc := c.Value("globalContext").(context.Context)
 		conn = gc.Value("dbMaster" + mode).(*gorp.DbMap)
 	case SHARD:
-		conn, err = getDBShardConnection(c, mode)
+		conn, err = GetDBShardConnection(c, mode)
 
 	default:
 		err = errors.New("undefined db type!!")
@@ -230,74 +230,20 @@ func GetDBConnection(c *gin.Context, tableName string, options ...interface{}) (
 	return conn, err
 }
 
-func GetDBMasterConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
-	var conn *gorp.DbMap
-	var err error
-
-	gc := c.Value("globalContext").(context.Context)
-
-	switch mode {
-	case MODE_W:
-		conn = gc.Value("dbMasterW").(*gorp.DbMap)
-
-	case MODE_R:
-		slaveIndex := c.Value("slaveIndex").(int)
-		masterRs := gc.Value("dbMasterRs").([]*gorp.DbMap)
-		conn = masterRs[slaveIndex]
-
-	case MODE_BAK:
-	// TODO:実装
-
-	default:
-		err = errors.New("invalid mode!!")
-	}
-
-	//
-	if conn == nil {
-		err = errors.New("connection is nil!!")
-	}
-
-	return conn, err
-}
-
-func getDBShardConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
+func GetDBShardConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
 	var conn *gorp.DbMap
 	var err error
 
 	// TODO:仮
 	shardId := 1
 
-	shardMap, err := getDBShardMap(c, mode)
+	shardMap, err := GetDBShardMap(c, mode)
 	if err != nil {
 		return nil, err
 	}
 	conn = shardMap[shardId]
 
 	return conn, err
-}
-
-func getDBShardMap(c *gin.Context, mode string) (map[int]*gorp.DbMap, error) {
-	var err error
-	var shardMap map[int]*gorp.DbMap
-
-	gc := c.Value("globalContext").(context.Context)
-
-	switch mode {
-	case MODE_W:
-		shardMap = gc.Value("dbShardWMap").(map[int]*gorp.DbMap)
-
-	case MODE_R:
-		slaveIndex := c.Value("slaveIndex").(int)
-		dbShardRMaps := gc.Value("dbShardRMaps").([]map[int]*gorp.DbMap)
-		shardMap = dbShardRMaps[slaveIndex]
-
-	case MODE_BAK:
-	// TODO:実装
-
-	default:
-		err = errors.New("invalid mode!!")
-	}
-	return shardMap, err
 }
 
 func GetDBSession(c *gin.Context) (*gorp.Transaction, error) {
@@ -362,4 +308,87 @@ func optionCheck(options ...interface{}) (string, bool, error) {
 	log.Info(mode)
 	log.Info(isForUpdate)
 	return mode, isForUpdate, err
+}
+
+//////////////////////
+
+func GetDBConnection2(c *gin.Context, mode string, isShard bool, shardId int) (*gorp.DbMap, error) {
+	var err error
+	var conn *gorp.DbMap
+
+	switch isShard {
+	case true:
+		// shard
+		shardMap, err := GetDBShardMap(c, mode)
+		if err != nil {
+			break
+		}
+		conn = shardMap[shardId]
+
+	case false:
+		// master
+		conn, err = GetDBMasterConnection(c, mode)
+
+	default:
+		// to do nothing
+	}
+
+	if conn == nil {
+		err = errors.New("not found db connection!!")
+	}
+	return conn, err
+}
+
+func GetDBMasterConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
+	var conn *gorp.DbMap
+	var err error
+
+	gc := c.Value("globalContext").(context.Context)
+
+	switch mode {
+	case MODE_W:
+		conn = gc.Value("dbMasterW").(*gorp.DbMap)
+
+	case MODE_R:
+		slaveIndex := c.Value("slaveIndex").(int)
+		masterRs := gc.Value("dbMasterRs").([]*gorp.DbMap)
+		conn = masterRs[slaveIndex]
+
+	case MODE_BAK:
+	// TODO:実装
+
+	default:
+		err = errors.New("invalid mode!!")
+	}
+
+	//
+	if conn == nil {
+		err = errors.New("connection is nil!!")
+	}
+
+	return conn, err
+}
+
+func GetDBShardMap(c *gin.Context, mode string) (map[int]*gorp.DbMap, error) {
+	var err error
+	var shardMap map[int]*gorp.DbMap
+
+	gc := c.Value("globalContext").(context.Context)
+
+	switch mode {
+	case MODE_W:
+		shardMap = gc.Value("dbShardWMap").(map[int]*gorp.DbMap)
+
+	case MODE_R:
+		slaveIndex := c.Value("slaveIndex").(int)
+		dbShardRMaps := gc.Value("dbShardRMaps").([]map[int]*gorp.DbMap)
+		shardMap = dbShardRMaps[slaveIndex]
+
+	case MODE_BAK:
+	// TODO:実装
+
+	default:
+		err = errors.New("invalid mode!!")
+	}
+	return shardMap, err
 }
