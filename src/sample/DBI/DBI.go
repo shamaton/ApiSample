@@ -36,6 +36,22 @@ const (
 	FOR_UPDATE = "FOR_UPDATE"
 )
 
+/**
+ * コンテキストで一意にするためのキー
+ */
+type contextKey string
+
+const (
+	dbMasterW    contextKey = "dbMasterW"
+	dbShardWMap             = "dbShardWMap"
+	dbMasterRs              = "dbMasterRs"
+	dbShardRMaps            = "dbShardRMaps"
+	txMaster                = "txMaster"
+	txShardMap              = "txShardMap"
+
+	slaveIndex              = "slaveIndex"
+)
+
 // masterは1つのハンドラをもち、slaveは複数のハンドラを持つ
 // master
 //  master *db
@@ -144,11 +160,11 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
 	}
 
 	// contextに設定
-	ctx = context.WithValue(ctx, "dbMasterW", masterW)
-	ctx = context.WithValue(ctx, "dbShardWMap", shardWMap)
+	ctx = context.WithValue(ctx, dbMasterW, masterW)
+	ctx = context.WithValue(ctx, dbShardWMap, shardWMap)
 
-	ctx = context.WithValue(ctx, "dbMasterRs", masterRs)
-	ctx = context.WithValue(ctx, "dbShardRMaps", shardRMaps)
+	ctx = context.WithValue(ctx, dbMasterRs, masterRs)
+	ctx = context.WithValue(ctx, dbShardRMaps, shardRMaps)
 
 	// TODO:BAK MODE
 
@@ -157,10 +173,10 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
 
 func StartTx(c *gin.Context) {
 	gc := c.Value("globalContext").(context.Context)
-	dbShardWMap := gc.Value("dbShardWMap").(map[int]*gorp.DbMap)
+	dbShardWMap := gc.Value(dbShardWMap).(map[int]*gorp.DbMap)
 
 	// すでに開始中の場合は何もしない
-	iFace, valid := c.Get("txMap")
+	iFace, valid := c.Get(txShardMap)
 	if valid && iFace != nil {
 		return
 	}
@@ -171,52 +187,32 @@ func StartTx(c *gin.Context) {
 		log.Info(k, " start tx!!")
 		txMap[k], _ = v.Begin()
 	}
-	c.Set("txMap", txMap)
+	c.Set(txShardMap, txMap)
 	// errを返す
 }
 
 func Commit(c *gin.Context) {
-	txMap := c.Value("txMap").(map[int]*gorp.Transaction)
+	txMap := c.Value(txShardMap).(map[int]*gorp.Transaction)
 	for k, v := range txMap {
 		log.Info(k, " commit!!")
 		/*err :=*/ v.Commit()
 		// txMap[k] = nil
 	}
-	c.Set("txMap", nil)
+	c.Set(txShardMap, nil)
 	// errを返す
 }
 
 func RollBack(c *gin.Context) {
-	iFace, valid := c.Get("txMap")
+	iFace, valid := c.Get(txShardMap)
 
 	if valid && iFace != nil {
 		txMap := iFace.(map[int]*gorp.Transaction)
 		for _, v := range txMap {
 			v.Rollback()
 		}
-		c.Set("txMap", nil)
+		c.Set(txShardMap, nil)
 	}
 	// errを返す
-}
-
-func GetDBSession(c *gin.Context) (*gorp.Transaction, error) {
-
-	// TODO:仮
-	shardId := 1
-
-	var err error
-	var tx *gorp.Transaction
-
-	// セッションを開始してない場合はエラーとしておく
-	iFace, valid := c.Get("txMap")
-	if valid {
-		sMap := iFace.(map[int]*gorp.Transaction)
-		tx = sMap[shardId]
-	} else {
-		err = errors.New("transaction not found!!")
-	}
-
-	return tx, err
 }
 
 // 使うslaveを決める
@@ -232,8 +228,55 @@ func checkErr(err error, msg string) {
 	}
 }
 
-//////////////////////
+/**
+ * get transaction function
+ */
+func GetTransaction(c *gin.Context, isShard bool, shardId int) (*gorp.Transaction, error) {
+	var err error
+	var tx *gorp.Transaction
 
+	switch isShard {
+	case true:
+		// shard
+		iFace, valid := c.Get(txShardMap)
+		if valid {
+			sMap := iFace.(map[int]*gorp.Transaction)
+			tx = sMap[shardId]
+		}
+
+	case false:
+		// master
+		iFace, valid := c.Get(txMaster)
+		if valid && iFace != nil {
+			tx = iFace.(*gorp.Transaction)
+		}
+
+	default:
+		// to do nothing
+	}
+
+	if tx == nil {
+		err = errors.New("not found transaction!!")
+		log.Error(err)
+	}
+
+	return tx, err
+}
+
+/**
+ * get db connection function
+ */
+/**************************************************************************************************/
+/*!
+ *  各DBへのハンドルを取得する
+ *
+ *  \param   c       : コンテキスト
+ *  \param   mode    : W, R, BAK
+ *  \param   isShard : trueの場合shardのDBハンドルを取得する
+ *  \param   shardId : 存在するshard ID
+ *  \return  DBハンドル、エラー
+ */
+/**************************************************************************************************/
 func GetDBConnection(c *gin.Context, mode string, isShard bool, shardId int) (*gorp.DbMap, error) {
 	var err error
 	var conn *gorp.DbMap
@@ -257,6 +300,15 @@ func GetDBConnection(c *gin.Context, mode string, isShard bool, shardId int) (*g
 	return conn, err
 }
 
+/**************************************************************************************************/
+/*!
+ *  masterのDBハンドルを取得する
+ *
+ *  \param   c : コンテキスト
+ *  \param   mode : W, R, BAK
+ *  \return  DBハンドル、エラー
+ */
+/**************************************************************************************************/
 func GetDBMasterConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
 	var conn *gorp.DbMap
 	var err error
@@ -265,11 +317,11 @@ func GetDBMasterConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
 
 	switch mode {
 	case MODE_W:
-		conn = gc.Value("dbMasterW").(*gorp.DbMap)
+		conn = gc.Value(dbMasterW).(*gorp.DbMap)
 
 	case MODE_R:
-		slaveIndex := c.Value("slaveIndex").(int)
-		masterRs := gc.Value("dbMasterRs").([]*gorp.DbMap)
+		slaveIndex := c.Value(slaveIndex).(int)
+		masterRs := gc.Value(dbMasterRs).([]*gorp.DbMap)
 		conn = masterRs[slaveIndex]
 
 	case MODE_BAK:
@@ -287,6 +339,16 @@ func GetDBMasterConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
 	return conn, err
 }
 
+/**************************************************************************************************/
+/*!
+ *  指定したShardIDのハンドルを取得する
+ *
+ *  \param   c : コンテキスト
+ *  \param   mode : W, R, BAK
+ *  \param   shardId : shard ID
+ *  \return  DBハンドル、エラー
+ */
+/**************************************************************************************************/
 func GetDBShardConnection(c *gin.Context, mode string, shardId int) (*gorp.DbMap, error) {
 	var conn *gorp.DbMap
 	var err error
@@ -300,6 +362,15 @@ func GetDBShardConnection(c *gin.Context, mode string, shardId int) (*gorp.DbMap
 	return conn, err
 }
 
+/**************************************************************************************************/
+/*!
+ *  ShardのDBハンドルマップを取得する
+ *
+ *  \param   c : コンテキスト
+ *  \param   mode : W, R, BAK
+ *  \return  DBハンドルマップ、エラー
+ */
+/**************************************************************************************************/
 func GetDBShardMap(c *gin.Context, mode string) (map[int]*gorp.DbMap, error) {
 	var err error
 	var shardMap map[int]*gorp.DbMap
@@ -308,11 +379,11 @@ func GetDBShardMap(c *gin.Context, mode string) (map[int]*gorp.DbMap, error) {
 
 	switch mode {
 	case MODE_W:
-		shardMap = gc.Value("dbShardWMap").(map[int]*gorp.DbMap)
+		shardMap = gc.Value(dbShardWMap).(map[int]*gorp.DbMap)
 
 	case MODE_R:
-		slaveIndex := c.Value("slaveIndex").(int)
-		dbShardRMaps := gc.Value("dbShardRMaps").([]map[int]*gorp.DbMap)
+		slaveIndex := c.Value(slaveIndex).(int)
+		dbShardRMaps := gc.Value(dbShardRMaps).([]map[int]*gorp.DbMap)
 		shardMap = dbShardRMaps[slaveIndex]
 
 	case MODE_BAK:
