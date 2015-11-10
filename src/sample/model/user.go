@@ -16,6 +16,9 @@ type UserRepo interface {
 	FindByID(*gin.Context, int, ...interface{}) (*User, error)
 
 	Update(map[string]interface{})
+
+	// test
+	FindsTest(*gin.Context)
 }
 
 func NewUserRepo() UserRepo {
@@ -32,4 +35,21 @@ func (r UserRepoImpl) FindByID(c *gin.Context, id int, options ...interface{}) (
 	user.Id = id
 	err := r.Find(c, user, options...)
 	return user, err
+}
+
+func (r UserRepoImpl) FindsTest(c *gin.Context) {
+	var users []User
+
+	whereCond := []interface{}{
+		[]interface{}{"id", ">", 0},
+	}
+	orderCond := []string{
+		"id ASC",
+		"score ASC",
+	}
+	var condition = map[string]interface{}{"where": whereCond, "order": orderCond}
+
+	var option = map[string]interface{}{"shard_id": 2}
+
+	r.Finds(c, &users, condition, option)
 }

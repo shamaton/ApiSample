@@ -14,6 +14,7 @@ import (
 //////////////////////////////
 type Base interface {
 	Find(*gin.Context, interface{}, ...interface{}) error
+	Finds(c *gin.Context, holders interface{}, condition map[string]interface{}, options ...interface{}) error
 
 	Update(map[string]interface{})
 }
@@ -131,7 +132,16 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 	return err
 }
 
-func (b *base) Finds(c *gin.Context, holders interface{}, options ...interface{}) error {
+func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]interface{}, options ...interface{}) error {
+
+	conditionCheck(condition)
+
+	sqlss, _, _ := builder.Select("hoge").From(b.table).OrderBy("id ASC", "score ASC").ToSql()
+	log.Debug(sqlss)
+
+	return nil
+
+	///////
 
 	mode, isForUpdate, shardKey, shardId, err := b.optionCheck(options...)
 	if err != nil {
@@ -143,49 +153,24 @@ func (b *base) Finds(c *gin.Context, holders interface{}, options ...interface{}
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
-	//log.Debug(dbTableConf)
 
 	// holder(table struct)からカラム情報を取得
 	var columns []string
 
-	// pkはwhere条件に必ず使う
-	var pkMap = builder.Eq{}
-
+	// TODO:共通化できそう
 	val := reflect.ValueOf(holders).Elem()
 	for i := 0; i < val.NumField(); i++ {
-		valueField := val.Field(i)
+		//valueField := val.Field(i)
 		typeField := val.Type().Field(i)
-		tag := typeField.Tag
+		//tag := typeField.Tag
 
 		// カラム
 		column := strings.ToLower(typeField.Name)
 		columns = append(columns, column)
-
-		// プライマリキー
-		if tag.Get("base") == "pk" {
-			pkMap[column] = valueField.Interface()
-		}
-
-		// shard keyを取得
-		if dbTableConf.IsUseTypeShard() && tag.Get("shard") == "true" {
-			// 2度設定はダメ
-			if shardKey != nil {
-				return errors.New("multiple shard key not available!!")
-			}
-			shardKey = valueField.Interface()
-			//log.Debug("shardkey : ", typeField.Name, " : ", shardKey)
-		}
 	}
 
-	// pkMapをチェックしておく
-	if len(pkMap) < 1 {
-		err = errors.New("must be set pks in struct!!")
-		log.Error(err)
-		return err
-	}
-
-	// shardの場合、shard_idを取得
-	if dbTableConf.IsUseTypeShard() {
+	// shardIdをoptionで受け取ってないなら、shardKeyから取得する
+	if dbTableConf.IsUseTypeShard() && shardId == 0 {
 		// value check
 		if shardKey == nil {
 			return errors.New("not set shard_key!!")
@@ -196,15 +181,12 @@ func (b *base) Finds(c *gin.Context, holders interface{}, options ...interface{}
 		if err != nil {
 			return err
 		}
-
-		//log.Debug("shard info : ", shardId)
-
 	}
 
 	// SQL生成
 	var sb builder.SelectBuilder
 	columnStr := strings.Join(columns, ",")
-	sb = builder.Select(columnStr).From(b.table).Where(pkMap)
+	sb = builder.Select(columnStr).From(b.table)
 	if isForUpdate {
 		sb = sb.Suffix("FOR UPDATE")
 	}
@@ -259,6 +241,25 @@ func (b *base) FindBySelectBuilder(c *gin.Context, holder interface{}, sb builde
 	return err
 }
 */
+
+func conditionCheck(condition map[string]interface{}) (builder.Eq, []string) {
+	var where builder.Eq
+	var order []string
+
+	for k, _ := range condition {
+		switch k {
+		case "where":
+			log.Debug("where!!")
+
+		case "order":
+			log.Debug("order!!")
+
+		default:
+
+		}
+	}
+	return where, order
+}
 
 /**************************************************************************************************/
 /*!
