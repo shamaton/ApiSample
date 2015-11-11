@@ -15,7 +15,7 @@ import (
 type Option map[string]interface{}
 type Condition map[string]interface{}
 type WhereCondition [][]interface{}
-type OrderCondition [][]string
+type OrderByCondition [][]string
 type In []interface{}
 
 // base
@@ -31,6 +31,9 @@ type base struct {
 	table string //<! テーブル名
 }
 
+/**
+ *  Find method
+ */
 /**************************************************************************************************/
 /*!
  *  pkを利用したfetchを行う
@@ -139,6 +142,20 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 	return err
 }
 
+/**
+ *  Finds method
+ */
+/**************************************************************************************************/
+/*!
+ *  指定テーブルへのselectを行う
+ *
+ *  \param   c         : コンテキスト
+ *  \param   holders   : select結果格納先
+ *  \param   condition : where, orderに利用する条件
+ *  \param   options   : モード[W,R,BAK] ロック[FOR_UPDATE]
+ *  \return  エラー（正常時はholdersにデータを取得する）
+ */
+/**************************************************************************************************/
 func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]interface{}, options ...interface{}) error {
 
 	wSql, wArgs, orders, err := b.conditionCheck(condition)
@@ -219,9 +236,10 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 		}
 	*/
 	sql, args, err := sb.ToSql()
-	log.Debug("sql -> ", sql, args, err)
+	log.Debug(sql)
 
 	// とりあえず分けてみる
+	// TODO:ここのforupdateどうするか
 	if isForUpdate {
 		tx, err := db.GetTransaction(c, dbTableConf.IsUseTypeShard(), shardId)
 		if err != nil {
@@ -243,15 +261,24 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 	return err
 }
 
+/**
+ *  Update method
+ */
 func (b *base) Update(hoge map[string]interface{}) {
 	log.Debug(hoge)
 	log.Debug("aaaaaa")
 }
 
+/**
+ *  Create method
+ */
 func Create() {
 
 }
 
+/**
+ *  Delete method
+ */
 func Delete() {
 
 }
@@ -270,6 +297,14 @@ func (b *base) FindBySelectBuilder(c *gin.Context, holder interface{}, sb builde
 }
 */
 
+/**************************************************************************************************/
+/*!
+ *  type 各Condition(WHERE, ORDER BY)の構文解析を行う
+ *
+ *  \param   condition : where, orderに利用する条件
+ *  \return  where文, where引数、orderBy用配列、エラー
+ */
+/**************************************************************************************************/
 func (b *base) conditionCheck(condition map[string]interface{}) (string, []interface{}, []string, error) {
 	var err error
 	var whereSql string
@@ -300,6 +335,27 @@ func (b *base) conditionCheck(condition map[string]interface{}) (string, []inter
 	return whereSql, whereArgs, orders, err
 }
 
+/**************************************************************************************************/
+/*!
+ *  Condition(WHERE)の構文解析を行う
+ *
+ *  使い方 :
+ *  WhereCondition{
+ *    {"column", "compare", value, ["AND/OR"]},
+ *    ...,
+ *  }
+ *  column  : カラム名
+ *  compare : 比較演算子("=", "<", ">", "<=", ">=", "IN", "LIKE")
+ *  vauie   : 比較値
+ *  AND/OR  : 次の条件式にANDかORで繋げる、省略時はAND
+ *
+ *  出力 :
+ *  ORDER BY column1 ASC, column2 DESC
+ *
+ *  \param   i : WhereCondition型のinterface
+ *  \return  where文, where引数、エラー
+ */
+/**************************************************************************************************/
 const whereConditionMin = 3
 const whereConditionMax = 4
 
@@ -402,6 +458,23 @@ func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) 
 	return pred, args, err
 }
 
+/**************************************************************************************************/
+/*!
+ *  Condition(ORDER BY)の構文解析を行う
+ *
+ *  使い方 :
+ *  OrderByCondition{
+ *    {"column1", "ASC"},
+ *    {"column2", "DESC"},
+ *    ...,
+ *  }
+ *  出力 :
+ *  ORDER BY column1 ASC, column2 DESC
+ *
+ *  \param   i : OrderByCondition型のinterface
+ *  \return  orderBy用配列、エラー
+ */
+/**************************************************************************************************/
 const orderCondition = 2
 
 func (b *base) orderSyntaxAnalyze(i interface{}) ([]string, error) {
@@ -409,7 +482,7 @@ func (b *base) orderSyntaxAnalyze(i interface{}) ([]string, error) {
 	var orders []string
 
 	// 型チェック
-	conds, ok := i.(OrderCondition)
+	conds, ok := i.(OrderByCondition)
 	if !ok {
 		err = errors.New("value is not where type!!")
 		return orders, err

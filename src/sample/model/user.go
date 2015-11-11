@@ -47,7 +47,7 @@ func (r UserRepoImpl) FindsTest(c *gin.Context) {
 		//{"id", "IN", In{1, 2, 3, 4}},
 		//{"name", "LIKE", "%aaa%"},
 	}
-	orderCond := OrderCondition{
+	orderCond := OrderByCondition{
 		{"id", "ASC"},
 		{"score", "ASC"},
 	}
