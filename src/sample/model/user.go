@@ -1,6 +1,7 @@
 package model
 
 import (
+	"github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 )
 
@@ -40,16 +41,24 @@ func (r UserRepoImpl) FindByID(c *gin.Context, id int, options ...interface{}) (
 func (r UserRepoImpl) FindsTest(c *gin.Context) {
 	var users []User
 
-	whereCond := []interface{}{
-		[]interface{}{"id", ">", 0},
+	whereCond := WhereCondition{
+		{"id", "<=", 1, "OR"},
+		{"id", ">", 2},
+		//{"id", "IN", In{1, 2, 3, 4}},
+		//{"name", "LIKE", "%aaa%"},
 	}
-	orderCond := []string{
-		"id ASC",
-		"score ASC",
+	orderCond := OrderCondition{
+		{"id", "ASC"},
+		{"score", "ASC"},
 	}
-	var condition = map[string]interface{}{"where": whereCond, "order": orderCond}
+	var condition = Condition{"where": whereCond, "order": orderCond}
 
-	var option = map[string]interface{}{"shard_id": 2}
+	var option = Option{"shard_id": 1}
 
 	r.Finds(c, &users, condition, option)
+	seelog.Debug(&users)
+
+	var hoges []User
+	r.Finds(c, &hoges, Condition{}, option)
+	seelog.Debug(&hoges)
 }

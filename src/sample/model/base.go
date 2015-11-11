@@ -7,14 +7,22 @@ import (
 	"github.com/gin-gonic/gin"
 	"reflect"
 	db "sample/DBI"
+	"strconv"
 	"strings"
 )
+
+// 一旦ここに
+type Option map[string]interface{}
+type Condition map[string]interface{}
+type WhereCondition [][]interface{}
+type OrderCondition [][]string
+type In []interface{}
 
 // base
 //////////////////////////////
 type Base interface {
 	Find(*gin.Context, interface{}, ...interface{}) error
-	Finds(c *gin.Context, holders interface{}, condition map[string]interface{}, options ...interface{}) error
+	Finds(c *gin.Context, holders interface{}, condition Condition, options ...interface{}) error
 
 	Update(map[string]interface{})
 }
@@ -41,7 +49,6 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 		log.Error("invalid options set!!")
 		return err
 	}
-	log.Debug("mode : ", mode, " | for_update : ", isForUpdate)
 
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
@@ -134,21 +141,16 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 
 func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]interface{}, options ...interface{}) error {
 
-	conditionCheck(condition)
-
-	sqlss, _, _ := builder.Select("hoge").From(b.table).OrderBy("id ASC", "score ASC").ToSql()
-	log.Debug(sqlss)
-
-	return nil
-
-	///////
+	wSql, wArgs, orders, err := b.conditionCheck(condition)
+	if err != nil {
+		return err
+	}
 
 	mode, isForUpdate, shardKey, shardId, err := b.optionCheck(options...)
 	if err != nil {
 		log.Error("invalid options set!!")
 		return err
 	}
-	log.Debug("mode : ", mode, " | for_update : ", isForUpdate, shardKey, shardId)
 
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
@@ -157,15 +159,30 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 	// holder(table struct)からカラム情報を取得
 	var columns []string
 
-	// TODO:共通化できそう
-	val := reflect.ValueOf(holders).Elem()
-	for i := 0; i < val.NumField(); i++ {
-		//valueField := val.Field(i)
-		typeField := val.Type().Field(i)
-		//tag := typeField.Tag
+	// 構造体のポインタ配列(holder)からカラムを取得する
+	// holdersは配列のポインタであること
+	var structRef reflect.Type
+	hRef := reflect.TypeOf(holders)
+	if hRef.Kind() != reflect.Ptr {
+		return errors.New("")
+	}
+	// 次にスライスであること
+	sRef := hRef.Elem()
+	if sRef.Kind() != reflect.Slice {
+		return errors.New("")
+	}
+	// 最後に構造体であること
+	structRef = sRef.Elem()
+	if structRef.Kind() != reflect.Struct {
+		return errors.New("")
+	}
+
+	// カラムの取得
+	for i := 0; i < structRef.NumField(); i++ {
+		field := structRef.Field(i)
 
 		// カラム
-		column := strings.ToLower(typeField.Name)
+		column := strings.ToLower(field.Name)
 		columns = append(columns, column)
 	}
 
@@ -186,11 +203,23 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 	// SQL生成
 	var sb builder.SelectBuilder
 	columnStr := strings.Join(columns, ",")
+
 	sb = builder.Select(columnStr).From(b.table)
-	if isForUpdate {
-		sb = sb.Suffix("FOR UPDATE")
+	if len(wSql) > 0 && len(wArgs) > 0 {
+		sb = sb.Where(wSql, wArgs...)
 	}
+	if len(orders) > 0 {
+		sb = sb.OrderBy(orders...)
+	}
+
+	// FOR UPDATEは一旦封印しておく
+	/*
+		if isForUpdate {
+			sb = sb.Suffix("FOR UPDATE")
+		}
+	*/
 	sql, args, err := sb.ToSql()
+	log.Debug("sql -> ", sql, args, err)
 
 	// とりあえず分けてみる
 	if isForUpdate {
@@ -211,7 +240,6 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 		_, err = dbMap.Select(holders, sql, args...)
 	}
 
-	// TODO:デバッグでは通常selectで複数行取得されないことも確認する
 	return err
 }
 
@@ -242,23 +270,165 @@ func (b *base) FindBySelectBuilder(c *gin.Context, holder interface{}, sb builde
 }
 */
 
-func conditionCheck(condition map[string]interface{}) (builder.Eq, []string) {
-	var where builder.Eq
-	var order []string
+func (b *base) conditionCheck(condition map[string]interface{}) (string, []interface{}, []string, error) {
+	var err error
+	var whereSql string
+	var whereArgs []interface{}
+	var orders []string
 
-	for k, _ := range condition {
+	for k, v := range condition {
 		switch k {
 		case "where":
-			log.Debug("where!!")
+			// where条件解析
+			whereSql, whereArgs, err = b.whereSyntaxAnalyze(v)
+			if err != nil {
+				log.Debug(err)
+				return whereSql, whereArgs, orders, err
+			}
 
 		case "order":
-			log.Debug("order!!")
+			// order条件解析
+			orders, err = b.orderSyntaxAnalyze(v)
+			if err != nil {
+				return whereSql, whereArgs, orders, err
+			}
 
 		default:
-
+			err = errors.New("invalid condition type!!")
 		}
 	}
-	return where, order
+	return whereSql, whereArgs, orders, err
+}
+
+const whereConditionMin = 3
+const whereConditionMax = 4
+
+func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) {
+	var err error
+	var pred string
+	var args []interface{}
+
+	// 型チェック
+	conds, ok := i.(WhereCondition)
+	if !ok {
+		err = errors.New("value is not where type!!")
+		return pred, args, err
+	}
+
+	// {"column", "condition", "value", "AND/OR(option)"}
+	lastIndex := len(conds) - 1
+	var allSentence []string
+	for index, cond := range conds {
+		// 長さチェック
+		length := len(cond)
+		if !(whereConditionMin <= length && length <= whereConditionMax) {
+			err = errors.New("where condition length error!! : " + strconv.Itoa(length))
+			return pred, args, err
+		}
+
+		// 1 : column (型チェックのみ)
+		column, ok := cond[0].(string)
+		if !ok {
+			err = errors.New("syntax error : column is string only!!")
+			return pred, args, err
+		}
+		allSentence = append(allSentence, column)
+
+		// 2 : 比較条件
+		compare, ok := cond[1].(string)
+		if !ok {
+			err = errors.New("syntax error : compare is string only!!")
+			return pred, args, err
+		}
+
+		isFind := false
+		compares := []string{"=", "<", ">", "<=", ">=", "IN", "LIKE"}
+		for _, v := range compares {
+			if compare == v {
+				isFind = true
+				break
+			}
+		}
+		if !isFind {
+			err = errors.New("syntax error : this word can't use!! " + compare)
+			return pred, args, err
+		}
+		allSentence = append(allSentence, compare)
+
+		// 3 : 値
+		if compare == "IN" {
+			// プレースホルダを用意し、値をargsに入れる
+			ifs := cond[2].(In)
+			phs := []string{}
+			for _, v := range ifs {
+				phs = append(phs, "?")
+				args = append(args, v)
+			}
+			// (?,?,?) の作成
+			placeHolders := strings.Join(phs, ",")
+			allSentence = append(allSentence, "("+placeHolders+")")
+		} else {
+			args = append(args, cond[2])
+			allSentence = append(allSentence, "?")
+		}
+
+		// 4 : AND / OR (ない場合、ANDで結合)
+		andOr := "AND"
+		if length == whereConditionMax {
+			c, ok := cond[3].(string)
+			if !ok {
+				err = errors.New("type error : this cond is and/or only!!")
+				return pred, args, err
+			}
+			// 構文チェック
+			if c != "AND" && c != "OR" {
+				err = errors.New("syntax error : this cond is and/or only!!")
+				return pred, args, err
+			}
+			andOr = c
+		}
+
+		// indexの最後以外は結合する
+		if index != lastIndex {
+			allSentence = append(allSentence, andOr)
+		}
+	}
+
+	// すべてを結合
+	pred = strings.Join(allSentence, " ")
+
+	log.Debug(pred, " : ", args)
+
+	return pred, args, err
+}
+
+const orderCondition = 2
+
+func (b *base) orderSyntaxAnalyze(i interface{}) ([]string, error) {
+	var err error
+	var orders []string
+
+	// 型チェック
+	conds, ok := i.(OrderCondition)
+	if !ok {
+		err = errors.New("value is not where type!!")
+		return orders, err
+	}
+
+	// ["column", "ASC/DESC"]
+	for _, cond := range conds {
+		// 長さチェック
+		length := len(cond)
+		if length != orderCondition {
+			err = errors.New("order condition length error!! : " + strconv.Itoa(length))
+			return orders, err
+		}
+		// 構文チェック
+		order := strings.Join(cond, " ")
+		orders = append(orders, order)
+	}
+
+	return orders, err
 }
 
 /**************************************************************************************************/
@@ -295,9 +465,9 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 				break
 			}
 
-		case map[string]interface{}:
+		case Option:
 			// 後で処理する
-			optionMap = v.(map[string]interface{})
+			optionMap = v.(Option)
 
 		default:
 			err = errors.New("can not check this type!!")

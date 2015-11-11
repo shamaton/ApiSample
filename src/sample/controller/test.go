@@ -61,7 +61,7 @@ func Test(c *gin.Context) {
 
 	userRepo.Update(nil)
 
-	var option = map[string]interface{}{"mode": db.MODE_R, "for_update": 1, "shard_id": 2}
+	var option = model.Option{"mode": db.MODE_R, "for_update": 1, "shard_id": 2}
 	user, err = userRepo.FindByID(c, 2, option)
 	if checkErr(c, err, "user for update error") {
 		return
