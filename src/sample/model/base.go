@@ -181,17 +181,17 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 	var structRef reflect.Type
 	hRef := reflect.TypeOf(holders)
 	if hRef.Kind() != reflect.Ptr {
-		return errors.New("")
+		return errors.New("holders type is not Ptr!!")
 	}
 	// 次にスライスであること
 	sRef := hRef.Elem()
 	if sRef.Kind() != reflect.Slice {
-		return errors.New("")
+		return errors.New("holders element type is not Slice!!")
 	}
 	// 最後に構造体であること
 	structRef = sRef.Elem()
 	if structRef.Kind() != reflect.Struct {
-		return errors.New("")
+		return errors.New("holders slice element type is not Struct!!")
 	}
 
 	// カラムの取得
