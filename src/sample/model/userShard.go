@@ -6,7 +6,6 @@ package model
  */
 
 import (
-	"errors"
 	builder "github.com/Masterminds/squirrel"
 	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
@@ -25,17 +24,15 @@ type UserShard struct {
 
 // user shard
 /////////////////////////////
-type ShardRepo interface {
-	FindShardIdByUserId(*gin.Context, interface{}) (int, error)
-
-	findShardId(*gin.Context, int, interface{}) (int, error)
+type UserShardRepo interface {
+	FindByUserId(*gin.Context, interface{}, ...interface{}) (*UserShard, error)
 }
 
-func NewShardRepo() ShardRepo {
-	return ShardRepoImpl{}
+func NewUserShardRepo() UserShardRepo {
+	return UserShardRepoImpl{}
 }
 
-type ShardRepoImpl struct {
+type UserShardRepoImpl struct {
 }
 
 /**************************************************************************************************/
@@ -47,46 +44,41 @@ type ShardRepoImpl struct {
  *  \return  shard ID、エラー
  */
 /**************************************************************************************************/
-func (r ShardRepoImpl) FindShardIdByUserId(c *gin.Context, userId interface{}) (int, error) {
-	shardId, err := r.findShardId(c, shardTypeUser, userId)
-	return shardId, err
-}
-
-//
-func (r ShardRepoImpl) findShardId(c *gin.Context, st int, value interface{}) (int, error) {
-	var shardId int
+func (r UserShardRepoImpl) FindByUserId(c *gin.Context, userId interface{}, options ...interface{}) (*UserShard, error) {
 	var err error
+	userShard := new(UserShard)
 
-	switch st {
-	case shardTypeUser:
-		// ハンドル取得
-		conn, err := DBI.GetDBMasterConnection(c, DBI.MODE_R)
-		if err != nil {
-			log.Error("not found master connection!!")
-			break
-		}
-
-		// user_shardを検索
-		sql, args, err := builder.Select("id, shard_id").From("user_shard").Where("id = ?", value).ToSql()
-		if err != nil {
-			log.Error("query build error!!")
-			break
-		}
-
-		var userShard = new(UserShard)
-		err = conn.SelectOne(userShard, sql, args...)
-		if err != nil {
-			log.Info("not found user shard id")
-			break
-		}
-		shardId = userShard.ShardId
-
-	//case shardTypeGroup:
-	// TODO:実装
-
-	default:
-		err = errors.New("undefined shard type!!")
+	// optionsの解析
+	b := base{}
+	mode, _, _, _, err := b.optionCheck(options...)
+	if err != nil {
+		log.Error("invalid options set!!")
+		return userShard, err
 	}
 
-	return shardId, err
+	// ハンドル取得
+	conn, err := DBI.GetDBMasterConnection(c, mode)
+	if err != nil {
+		log.Error("not found master connection!!")
+		return userShard, err
+	}
+
+	// クエリ生成
+	sql, args, err := builder.Select("id, shard_id").From("user_shard").Where("id = ?", userId).ToSql()
+	if err != nil {
+		log.Error("query build error!!")
+		return userShard, err
+	}
+
+	// user_shardを検索
+	err = conn.SelectOne(userShard, sql, args...)
+	if err != nil {
+		return userShard, err
+	}
+	// ユーザー生成していない場合があるので、エラーにはしない
+	if userShard.ShardId < 1 {
+		log.Info("not found user shard id")
+	}
+
+	return userShard, err
 }

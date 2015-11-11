@@ -57,6 +57,8 @@ func Test(c *gin.Context) {
 	if checkErr(c, err, "user for update error") {
 		return
 	}
+	log.Debug(user)
+
 	time.Sleep(1 * time.Second)
 
 	userRepo.Update(nil)
@@ -66,6 +68,7 @@ func Test(c *gin.Context) {
 	if checkErr(c, err, "user for update error") {
 		return
 	}
+	log.Debug(user)
 
 	userRepo.FindsTest(c)
 
