@@ -13,6 +13,7 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/gorp.v1"
+	ckey "sample/conf/context"
 )
 
 var (
@@ -30,25 +31,6 @@ const (
 
 const (
 	FOR_UPDATE = "FOR_UPDATE"
-)
-
-/**
- * コンテキストで一意にするためのキー
- */
-type contextKey string
-
-const (
-	dbMasterW    contextKey = "dbMasterW"
-	dbShardWMap             = "dbShardWMap"
-	dbMasterRs              = "dbMasterRs"
-	dbShardRMaps            = "dbShardRMaps"
-	txMaster                = "txMaster"
-	txShardMap              = "txShardMap"
-
-	isMasterTxStart = "isMasterTxStart"
-	isShardTxStart  = "isShardTxStart"
-
-	slaveIndex = "slaveIndex"
 )
 
 type DBIRepo struct {
@@ -176,11 +158,11 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
 	}
 
 	// contextに設定
-	ctx = context.WithValue(ctx, dbMasterW, masterW)
-	ctx = context.WithValue(ctx, dbShardWMap, shardWMap)
+	ctx = context.WithValue(ctx, ckey.DbMasterW, masterW)
+	ctx = context.WithValue(ctx, ckey.DbShardWMap, shardWMap)
 
-	ctx = context.WithValue(ctx, dbMasterRs, masterRs)
-	ctx = context.WithValue(ctx, dbShardRMaps, shardRMaps)
+	ctx = context.WithValue(ctx, ckey.DbMasterRs, masterRs)
+	ctx = context.WithValue(ctx, ckey.DbShardRMaps, shardRMaps)
 
 	// TODO:BAK MODE
 
@@ -214,13 +196,13 @@ func MasterTxStart(c *gin.Context) error {
 	var err error
 
 	// すでに開始中の場合は何もしない
-	if isTransactonStart(c, isMasterTxStart) {
+	if isTransactonStart(c, ckey.IsMasterTxStart) {
 		return err
 	}
 
 	// dbハンドル取得
 	gc := c.Value("globalContext").(context.Context)
-	dbMap := gc.Value(dbMasterW).(*gorp.DbMap)
+	dbMap := gc.Value(ckey.DbMasterW).(*gorp.DbMap)
 
 	// transaction start
 	var tx *gorp.Transaction
@@ -230,8 +212,8 @@ func MasterTxStart(c *gin.Context) error {
 	}
 
 	// リクエストコンテキストに保存
-	c.Set(txMaster, tx)
-	c.Set(isMasterTxStart, true)
+	c.Set(ckey.TxMaster, tx)
+	c.Set(ckey.IsMasterTxStart, true)
 
 	return err
 }
@@ -248,13 +230,13 @@ func ShardAllTxStart(c *gin.Context) error {
 	var err error
 
 	// すでに開始中の場合は何もしない
-	if isTransactonStart(c, isShardTxStart) {
+	if isTransactonStart(c, ckey.IsShardTxStart) {
 		return err
 	}
 
 	// dbハンドルマップを取得
 	gc := c.Value("globalContext").(context.Context)
-	dbShardWMap := gc.Value(dbShardWMap).(map[int]*gorp.DbMap)
+	dbShardWMap := gc.Value(ckey.DbShardWMap).(map[int]*gorp.DbMap)
 
 	var txMap = map[int]*gorp.Transaction{}
 	// txのマップを作成
@@ -269,8 +251,8 @@ func ShardAllTxStart(c *gin.Context) error {
 	}
 
 	// リクエストコンテキストに保存
-	c.Set(txShardMap, txMap)
-	c.Set(isShardTxStart, true)
+	c.Set(ckey.TxShardMap, txMap)
+	c.Set(ckey.IsShardTxStart, true)
 
 	return err
 }
@@ -302,7 +284,7 @@ func Commit(c *gin.Context) error {
 /**************************************************************************************************/
 func masterCommit(c *gin.Context) error {
 	var err error
-	iFace, valid := c.Get(txMaster)
+	iFace, valid := c.Get(ckey.TxMaster)
 
 	if valid && iFace != nil {
 		tx := iFace.(*gorp.Transaction)
@@ -310,7 +292,7 @@ func masterCommit(c *gin.Context) error {
 
 		// エラーじゃなければ削除
 		if err == nil {
-			c.Set(txMaster, nil)
+			c.Set(ckey.TxMaster, nil)
 		}
 	}
 	return err
@@ -328,7 +310,7 @@ func shardCommit(c *gin.Context) error {
 	var err error
 	var hasError = false
 
-	iFace, valid := c.Get(txShardMap)
+	iFace, valid := c.Get(ckey.TxShardMap)
 
 	if valid && iFace != nil {
 		// 取得してすべてcommitする
@@ -344,7 +326,7 @@ func shardCommit(c *gin.Context) error {
 
 		// エラーが起きてなければ削除
 		if !hasError {
-			c.Set(txShardMap, nil)
+			c.Set(ckey.TxShardMap, nil)
 		}
 	}
 	return err
@@ -377,7 +359,7 @@ func RollBack(c *gin.Context) error {
 /**************************************************************************************************/
 func masterRollback(c *gin.Context) error {
 	var err error
-	iFace, valid := c.Get(txMaster)
+	iFace, valid := c.Get(ckey.TxMaster)
 
 	if valid && iFace != nil {
 		tx := iFace.(*gorp.Transaction)
@@ -385,7 +367,7 @@ func masterRollback(c *gin.Context) error {
 
 		// エラーじゃなければ削除
 		if err == nil {
-			c.Set(txMaster, nil)
+			c.Set(ckey.TxMaster, nil)
 		}
 	}
 	return err
@@ -403,7 +385,7 @@ func shardRollback(c *gin.Context) error {
 	var err error
 	var hasError = false
 
-	iFace, valid := c.Get(txShardMap)
+	iFace, valid := c.Get(ckey.TxShardMap)
 
 	if valid && iFace != nil {
 		// 取得してすべてrollbackする
@@ -419,7 +401,7 @@ func shardRollback(c *gin.Context) error {
 
 		// エラーが起きてなければ削除
 		if !hasError {
-			c.Set(txShardMap, nil)
+			c.Set(ckey.TxShardMap, nil)
 		}
 	}
 	return err
@@ -446,7 +428,7 @@ func GetTransaction(c *gin.Context, isShard bool, shardId int) (*gorp.Transactio
 	case true:
 		// shard
 		// トランザクションを開始してない場合、開始する
-		if !isTransactonStart(c, isShardTxStart) {
+		if !isTransactonStart(c, ckey.IsShardTxStart) {
 			err = ShardAllTxStart(c)
 
 			if err != nil {
@@ -455,7 +437,7 @@ func GetTransaction(c *gin.Context, isShard bool, shardId int) (*gorp.Transactio
 			}
 		}
 		// shard
-		iFace, valid := c.Get(txShardMap)
+		iFace, valid := c.Get(ckey.TxShardMap)
 		if valid && iFace != nil {
 			sMap := iFace.(map[int]*gorp.Transaction)
 			tx = sMap[shardId]
@@ -464,7 +446,7 @@ func GetTransaction(c *gin.Context, isShard bool, shardId int) (*gorp.Transactio
 	case false:
 		// master
 		// トランザクションを開始してない場合、開始する
-		if isTransactonStart(c, isMasterTxStart) {
+		if isTransactonStart(c, ckey.IsMasterTxStart) {
 			err = MasterTxStart(c)
 
 			if err != nil {
@@ -473,7 +455,7 @@ func GetTransaction(c *gin.Context, isShard bool, shardId int) (*gorp.Transactio
 			}
 		}
 		// master
-		iFace, valid := c.Get(txMaster)
+		iFace, valid := c.Get(ckey.TxMaster)
 		if valid && iFace != nil {
 			tx = iFace.(*gorp.Transaction)
 		}
@@ -552,11 +534,11 @@ func GetDBMasterConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
 
 	switch mode {
 	case MODE_W:
-		conn = gc.Value(dbMasterW).(*gorp.DbMap)
+		conn = gc.Value(ckey.DbMasterW).(*gorp.DbMap)
 
 	case MODE_R:
-		slaveIndex := c.Value(slaveIndex).(int)
-		masterRs := gc.Value(dbMasterRs).([]*gorp.DbMap)
+		slaveIndex := c.Value(ckey.SlaveIndex).(int)
+		masterRs := gc.Value(ckey.DbMasterRs).([]*gorp.DbMap)
 		conn = masterRs[slaveIndex]
 
 	case MODE_BAK:
@@ -614,11 +596,11 @@ func GetDBShardMap(c *gin.Context, mode string) (map[int]*gorp.DbMap, error) {
 
 	switch mode {
 	case MODE_W:
-		shardMap = gc.Value(dbShardWMap).(map[int]*gorp.DbMap)
+		shardMap = gc.Value(ckey.DbShardWMap).(map[int]*gorp.DbMap)
 
 	case MODE_R:
-		slaveIndex := c.Value(slaveIndex).(int)
-		dbShardRMaps := gc.Value(dbShardRMaps).([]map[int]*gorp.DbMap)
+		slaveIndex := c.Value(ckey.SlaveIndex).(int)
+		dbShardRMaps := gc.Value(ckey.DbShardRMaps).([]map[int]*gorp.DbMap)
 		shardMap = dbShardRMaps[slaveIndex]
 
 	case MODE_BAK:
