@@ -23,8 +23,9 @@ type SlaveServer struct {
 }
 
 type DbConfig struct {
-	User string `toml:"user"`
-	Pass string `toml:"pass"`
+	User  string `toml:"user"`
+	Pass  string `toml:"pass"`
+	Shard int    `toml:"shard"`
 }
 
 type KvsConfig struct {

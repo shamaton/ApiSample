@@ -18,8 +18,7 @@ import (
 
 var (
 	slaveWeights []int
-
-	shardIds = [...]int{1, 2}
+	shardIds     []int
 )
 
 // TODO:この辺ちゃんとする
@@ -76,6 +75,11 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
 		// construct a gorp DbMap
 		dbmap := &gorp.DbMap{Db: db, Dialect: gorp.MySQLDialect{"InnoDB", "UTF8"}}
 		return dbmap, err
+	}
+
+	// make shards
+	for i := 0; i < gc.Db.Shard; i++ {
+		shardIds = append(shardIds, i+1)
 	}
 
 	// master - master
