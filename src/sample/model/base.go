@@ -160,6 +160,7 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 
 	wSql, wArgs, orders, err := b.conditionCheck(condition)
 	if err != nil {
+		log.Error("invalid condition set!!")
 		return err
 	}
 
@@ -172,9 +173,6 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
-
-	// holder(table struct)からカラム情報を取得
-	var columns []string
 
 	// 構造体のポインタ配列(holder)からカラムを取得する
 	// holdersは配列のポインタであること
@@ -195,6 +193,7 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 	}
 
 	// カラムの取得
+	var columns []string
 	for i := 0; i < structRef.NumField(); i++ {
 		field := structRef.Field(i)
 
