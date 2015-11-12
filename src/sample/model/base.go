@@ -24,7 +24,7 @@ type Base interface {
 	Find(*gin.Context, interface{}, ...interface{}) error
 	Finds(c *gin.Context, holders interface{}, condition Condition, options ...interface{}) error
 
-	Update(map[string]interface{})
+	Update(interface{})
 }
 
 type base struct {
@@ -57,42 +57,10 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 	dbTableConfRepo := NewDbTableConfRepo()
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
 
-	// holder(table struct)からカラム情報を取得
-	var columns []string
-	var shardKey interface{}
-
-	// pkはwhere条件に必ず使う
-	var pkMap = builder.Eq{}
-
-	val := reflect.ValueOf(holder).Elem()
-	for i := 0; i < val.NumField(); i++ {
-		valueField := val.Field(i)
-		typeField := val.Type().Field(i)
-		tag := typeField.Tag
-
-		// カラム
-		column := strings.ToLower(typeField.Name)
-		columns = append(columns, column)
-
-		// プライマリキー
-		if tag.Get("base") == "pk" {
-			pkMap[column] = valueField.Interface()
-		}
-
-		// shard keyを取得
-		if dbTableConf.IsUseTypeShard() && tag.Get("shard") == "true" {
-			// 2度設定はダメ
-			if shardKey != nil {
-				return errors.New("multiple shard key not available!!")
-			}
-			shardKey = valueField.Interface()
-		}
-	}
-
-	// pkMapをチェックしておく
-	if len(pkMap) < 1 {
-		err = errors.New("must be set pks in struct!!")
-		log.Error(err)
+	// holderから各要素を取得
+	columns, _, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	if err != nil {
+		log.Error("read error in struct data")
 		return err
 	}
 
@@ -263,9 +231,102 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 /**
  *  Update method
  */
-func (b *base) Update(hoge map[string]interface{}) {
-	log.Debug(hoge)
+/**************************************************************************************************/
+/*!
+ *  PRIMARY KEYを用いたUPDATEを実行する
+ *
+ *  \param   condition : where, orderに利用する条件
+ *  \return  where文, where引数、orderBy用配列、エラー
+ */
+/**************************************************************************************************/
+func (b *base) Update(holder interface{}) {
 	log.Debug("aaaaaa")
+	/*
+		// 更新するための値を
+		val := reflect.ValueOf(holder).Elem()
+		for i := 0; i < val.NumField(); i++ {
+			valueField := val.Field(i)
+			typeField := val.Type().Field(i)
+			tag := typeField.Tag
+
+			// カラム
+			column := strings.ToLower(typeField.Name)
+			columns = append(columns, column)
+
+			// プライマリキー
+			if tag.Get("base") == "pk" {
+				pkMap[column] = valueField.Interface()
+			}
+
+			// shard keyを取得
+			if dbTableConf.IsUseTypeShard() && tag.Get("shard") == "true" {
+				// 2度設定はダメ
+				if shardKey != nil {
+					return errors.New("multiple shard key not available!!")
+				}
+				shardKey = valueField.Interface()
+			}
+		}
+	*/
+}
+
+/**************************************************************************************************/
+/*!
+ *  データ構造体からDBに関連する各種情報を取得する
+ *
+ *  \param   holder      : テーブルデータ構造体(実体)
+ *  \param   dbTableConf : db_table_confマスタ情報
+ *  \return  カラム、pk以外の値、pkのマップ、shard検索キー、エラー
+ */
+/**************************************************************************************************/
+func (b *base) getTableInfoFromStructData(holder interface{}, dbTableConf *DbTableConf) ([]string, []interface{}, builder.Eq, interface{}, error) {
+	var err error
+
+	var columns []string
+	var values []interface{}
+	var shardKey interface{}
+
+	var pkMap = builder.Eq{}
+
+	// 実体の要素を把握する
+	val := reflect.ValueOf(holder).Elem()
+	for i := 0; i < val.NumField(); i++ {
+		// 変数定義
+		field := val.Type().Field(i)
+		// タグ設定
+		tag := field.Tag
+		// 実値
+		value := val.Field(i).Interface()
+
+		// カラム
+		column := strings.ToLower(field.Name)
+		columns = append(columns, column)
+
+		// PKは検索条件とし、それ以外は値を取得する
+		if tag.Get("base") == "pk" {
+			pkMap[column] = value
+		} else {
+			values = append(values, value)
+		}
+
+		// shard keyを取得
+		if dbTableConf.IsUseTypeShard() && tag.Get("shard") == "true" {
+			// 2度設定はダメ
+			if shardKey != nil {
+				err = errors.New("multiple shard key not available!!")
+				return columns, values, pkMap, shardKey, err
+			}
+			shardKey = value
+		}
+	}
+
+	// pkMapをチェックしておく
+	if len(pkMap) < 1 {
+		err = errors.New("must be set pks in struct!!")
+		return columns, values, pkMap, shardKey, err
+	}
+
+	return columns, values, pkMap, shardKey, err
 }
 
 /**

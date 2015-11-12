@@ -16,7 +16,7 @@ type User struct {
 type UserRepo interface {
 	FindByID(*gin.Context, int, ...interface{}) (*User, error)
 
-	Update(map[string]interface{})
+	Update(interface{})
 
 	// test
 	FindsTest(*gin.Context)
