@@ -3,28 +3,25 @@ package DBI
 import (
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/go-xorm/xorm"
 	"golang.org/x/net/context"
 	"math/rand"
 	"sample/conf/gameConf"
 	"strconv"
 
+	"database/sql"
 	"errors"
 	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
+	"gopkg.in/gorp.v1"
+	ckey "sample/conf/context"
 )
 
 var (
 	slaveWeights []int
-
-	shardIds = [...]int{1, 2}
+	shardIds     []int
 )
 
-const (
-	MASTER = iota
-	SHARD
-)
-
+// TODO:この辺ちゃんとする
 const (
 	MODE_W   = "W"   // master
 	MODE_R   = "R"   // slave
@@ -35,67 +32,128 @@ const (
 	FOR_UPDATE = "FOR_UPDATE"
 )
 
-func BuildInstances(ctx context.Context) context.Context {
+type DBIRepo struct {
+}
+
+func NewDBIRepo() *DBIRepo {
+	return new(DBIRepo)
+}
+
+/**************************************************************************************************/
+/*!
+ *  dbハンドラを生成する
+ *
+ *  masterは1つのハンドラをもち、slaveは複数のハンドラを持つ
+ *  master
+ *   master *db
+ *   shard map[int]*db
+ * ----------------
+ *  slave
+ *   master []*db
+ *   shard []map[int]*db
+ *
+ *
+ *  \param   ctx : グローバルなコンテキスト
+ *  \return  ハンドラ登録済みのコンテキスト、エラー
+ */
+/**************************************************************************************************/
+func BuildInstances(ctx context.Context) (context.Context, error) {
 	var err error
 
-	gameConf := ctx.Value("gameConf").(*gameConf.GameConfig)
+	gc := ctx.Value("gameConf").(*gameConf.GameConfig)
 
-	// mapは初期化されないので注意
-	var dbShardWMap = map[int]*xorm.Engine{}
+	// gorpのオブジェクトを取得
+	getGorp := func(dbConf gameConf.DbConfig, host, port, dbName string) (*gorp.DbMap, error) {
 
-	master_dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8",
-		gameConf.Db.User,
-		gameConf.Db.Pass,
-		gameConf.Server.Host,
-		gameConf.Server.Port,
-		"game_master")
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8", dbConf.User, dbConf.Pass, host, port, dbName)
 
-	// master_master
-	dbMasterW, err := xorm.NewEngine("mysql", master_dsn)
-	checkErr(err, "masterDB master instance failed!!")
+		db, err := sql.Open("mysql", dsn)
+		if err != nil {
+			log.Critical(err)
+		}
 
-	// master_shard
-	for _, shard_id := range shardIds {
-		shard_dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8",
-			gameConf.Db.User,
-			gameConf.Db.Pass,
-			gameConf.Server.Host,
-			gameConf.Server.Port,
-			"game_shard_"+strconv.Itoa(shard_id))
-		dbShardWMap[shard_id], err = xorm.NewEngine("mysql", shard_dsn)
-		checkErr(err, "master shard "+strconv.Itoa(shard_id)+" instance failed!!")
-
+		// construct a gorp DbMap
+		dbmap := &gorp.DbMap{Db: db, Dialect: gorp.MySQLDialect{"InnoDB", "UTF8"}}
+		return dbmap, err
 	}
 
-	// slave_master
-	shard_dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8",
-		gameConf.Db.User,
-		gameConf.Db.Pass,
-		gameConf.Server.Host,
-		gameConf.Server.Port,
-		"game_master")
+	// make shards
+	for i := 0; i < gc.Db.Shard; i++ {
+		shardIds = append(shardIds, i+1)
+	}
 
-	dbMasterR, err := xorm.NewEngine("mysql", shard_dsn)
-	checkErr(err, "slaveDB master instance failed!!")
+	// master - master
+	masterW, err := getGorp(gc.Db, gc.Server.Host, gc.Server.Port, "game_master")
+	if err != nil {
+		log.Critical("master : game_master setup failed!!")
+		return ctx, err
+	}
 
-	// slave_shard
-	var dbShardRMaps []map[int]*xorm.Engine
-	for slave_index, slaveConf := range gameConf.Server.Slave {
-		var shardMap = map[int]*xorm.Engine{}
+	// master - shard
+	var shardWMap = map[int]*gorp.DbMap{}
+	for _, shardId := range shardIds {
+		// database
+		dbName := "game_shard_" + strconv.Itoa(shardId)
 
-		for _, shard_id := range shardIds {
-			dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8",
-				gameConf.Db.User,
-				gameConf.Db.Pass,
-				slaveConf.Host,
-				gameConf.Server.Port,
-				"game_shard_"+strconv.Itoa(shard_id))
+		// mapping
+		shardWMap[shardId], err = getGorp(
+			gc.Db,
+			gc.Server.Host,
+			gc.Server.Port,
+			dbName)
 
-			// create instance
-			shardMap[shard_id], err = xorm.NewEngine("mysql", dsn)
-			checkErr(err, "slave shard"+strconv.Itoa(shard_id)+" instance failed!!")
+		// error
+		if err != nil {
+			log.Critical("master : " + dbName + " setup failed!!")
+			return ctx, err
 		}
-		dbShardRMaps = append(dbShardRMaps, shardMap)
+	}
+
+	// read-only database
+	// slave
+	var masterRs []*gorp.DbMap
+	var shardRMaps []map[int]*gorp.DbMap
+	for slave_index, slaveConf := range gc.Server.Slave {
+		///////////////////////////////////
+		// MASTER
+		// mapping
+		masterR, err := getGorp(
+			gc.Db,
+			slaveConf.Host,
+			slaveConf.Port,
+			"game_master")
+
+		// error
+		if err != nil {
+			log.Critical("slave : game_master setup failed!!")
+			return ctx, err
+		}
+
+		// add slave masters
+		masterRs = append(masterRs, masterR)
+
+		///////////////////////////////////
+		// SHARD
+		var shardMap = map[int]*gorp.DbMap{}
+
+		for _, shardId := range shardIds {
+			// database
+			dbName := "game_shard_" + strconv.Itoa(shardId)
+
+			// mapping
+			shardMap[shardId], err = getGorp(
+				gc.Db,
+				slaveConf.Host,
+				slaveConf.Port,
+				dbName)
+
+			// error
+			if err != nil {
+				log.Critical("slave : " + dbName + " setup failed!!")
+				return ctx, err
+			}
+		}
+		shardRMaps = append(shardRMaps, shardMap)
 
 		// slaveの選択比重
 		for i := 0; i < slaveConf.Weight; i++ {
@@ -104,111 +162,419 @@ func BuildInstances(ctx context.Context) context.Context {
 	}
 
 	// contextに設定
-	ctx = context.WithValue(ctx, "dbMasterW", dbMasterW)
-	ctx = context.WithValue(ctx, "dbMasterR", dbMasterR)
-	ctx = context.WithValue(ctx, "dbShardWMap", dbShardWMap)
-	ctx = context.WithValue(ctx, "dbShardRMaps", dbShardRMaps)
+	ctx = context.WithValue(ctx, ckey.DbMasterW, masterW)
+	ctx = context.WithValue(ctx, ckey.DbShardWMap, shardWMap)
 
-	return ctx
+	ctx = context.WithValue(ctx, ckey.DbMasterRs, masterRs)
+	ctx = context.WithValue(ctx, ckey.DbShardRMaps, shardRMaps)
+
+	// TODO:BAK MODE
+
+	return ctx, err
 }
 
-func StartTx(c *gin.Context) {
-	gc := c.Value("globalContext").(context.Context)
-	dbShardWMap := gc.Value("dbShardWMap").(map[int]*xorm.Engine)
+/**************************************************************************************************/
+/*!
+ *  リクエスト中に使用するslaveを決める
+ *
+ *  \return  使用するslaveのindex
+ */
+/**************************************************************************************************/
+func DecideUseSlave() int {
+	slaveIndex := rand.Intn(len(slaveWeights))
+	return slaveWeights[slaveIndex]
+}
+
+/**
+ * BEGIN function
+ */
+/**************************************************************************************************/
+/*!
+ *  masterでトランザクションを開始する
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
+func MasterTxStart(c *gin.Context) error {
+	var err error
 
 	// すでに開始中の場合は何もしない
-	iFace, valid := c.Get("txMap")
-	if valid && iFace != nil {
-		return
+	if isTransactonStart(c, ckey.IsMasterTxStart) {
+		return err
 	}
 
-	var txMap = map[int]*xorm.Session{}
+	// dbハンドル取得
+	gc := c.Value("globalContext").(context.Context)
+	dbMap := gc.Value(ckey.DbMasterW).(*gorp.DbMap)
+
+	// transaction start
+	var tx *gorp.Transaction
+	tx, err = dbMap.Begin()
+	if err != nil {
+		return err
+	}
+
+	// リクエストコンテキストに保存
+	c.Set(ckey.TxMaster, tx)
+	c.Set(ckey.IsMasterTxStart, true)
+
+	return err
+}
+
+/**************************************************************************************************/
+/*!
+ *  すべてのshardでトランザクションを開始する
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
+func ShardAllTxStart(c *gin.Context) error {
+	var err error
+
+	// すでに開始中の場合は何もしない
+	if isTransactonStart(c, ckey.IsShardTxStart) {
+		return err
+	}
+
+	// dbハンドルマップを取得
+	gc := c.Value("globalContext").(context.Context)
+	dbShardWMap := gc.Value(ckey.DbShardWMap).(map[int]*gorp.DbMap)
+
+	var txMap = map[int]*gorp.Transaction{}
 	// txのマップを作成
 	for k, v := range dbShardWMap {
 		log.Info(k, " start tx!!")
-		txMap[k] = v.NewSession()
+		txMap[k], err = v.Begin()
+
+		// エラーが起きた時点でおかしいのでreturn
+		if err != nil {
+			return err
+		}
 	}
-	c.Set("txMap", txMap)
-	// errを返す
+
+	// リクエストコンテキストに保存
+	c.Set(ckey.TxShardMap, txMap)
+	c.Set(ckey.IsShardTxStart, true)
+
+	return err
 }
 
-func Commit(c *gin.Context) {
-	txMap := c.Value("txMap").(map[int]*xorm.Session)
-	for k, v := range txMap {
-		log.Info(k, " commit!!")
-		/*err :=*/ v.Commit()
-		// txMap[k] = nil
-	}
-	c.Set("txMap", nil)
-	// errを返す
+/**
+ * COMMIT function
+ */
+/**************************************************************************************************/
+/*!
+ *  開始した全てのtransactionをcommitする
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
+func Commit(c *gin.Context) error {
+	err := masterCommit(c)
+	err = shardCommit(c)
+	return err
 }
 
-func RollBack(c *gin.Context) {
-	iFace, valid := c.Get("txMap")
+/**************************************************************************************************/
+/*!
+ *  masterの開始したtransactionをcommitする
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
+func masterCommit(c *gin.Context) error {
+	var err error
+	iFace, valid := c.Get(ckey.TxMaster)
 
 	if valid && iFace != nil {
-		txMap := iFace.(map[int]*xorm.Session)
-		for _, v := range txMap {
-			v.Rollback()
+		tx := iFace.(*gorp.Transaction)
+		err = tx.Commit()
+
+		// エラーじゃなければ削除
+		if err == nil {
+			c.Set(ckey.TxMaster, nil)
 		}
-		c.Set("txMap", nil)
 	}
-	// errを返す
+	return err
 }
 
-// TODO:不要かも知れない
-func Close(c *gin.Context) {
-	// NOTE:txMapはキーが存在しているため、trueになる
-	iFace, _ := c.Get("txMap")
-
-	if iFace != nil {
-		txMap := iFace.(map[int]*xorm.Session)
-		for _, v := range txMap {
-			v.Close()
-		}
-		c.Set("txMap", nil)
-	}
-}
-
-func GetDBConnection(c *gin.Context, tableName string, options ...interface{}) (*xorm.Engine, error) {
+/**************************************************************************************************/
+/*!
+ *  shardの開始したtransactionをcommitする
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
+func shardCommit(c *gin.Context) error {
 	var err error
-	var conn *xorm.Engine
+	var hasError = false
 
-	mode, _, err := optionCheck(options...)
-	if err != nil {
-		return conn, err
+	iFace, valid := c.Get(ckey.TxShardMap)
+
+	if valid && iFace != nil {
+		// 取得してすべてcommitする
+		txMap := iFace.(map[int]*gorp.Transaction)
+		for k, v := range txMap {
+			log.Debug(k, " commit!!")
+			err = v.Commit()
+			// 正常な場合、削除する
+			if err == nil {
+				delete(txMap, k)
+			}
+		}
+
+		// エラーが起きてなければ削除
+		if !hasError {
+			c.Set(ckey.TxShardMap, nil)
+		}
 	}
+	return err
+}
 
-	// db_conf_tableからshardかmasterを取得
-	dbType := SHARD // shard
+/**
+ * ROLLBACK function
+ */
+/**************************************************************************************************/
+/*!
+ *  開始した全てのtransactionをrollbackする
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
+func RollBack(c *gin.Context) error {
+	err := masterRollback(c)
+	err = shardRollback(c)
+	return err
+}
 
-	// masterの場合
-	switch dbType {
-	case MASTER:
-		gc := c.Value("globalContext").(context.Context)
-		conn = gc.Value("dbMaster" + mode).(*xorm.Engine)
-	case SHARD:
-		conn, err = getDBShardConnection(c, mode)
+/**************************************************************************************************/
+/*!
+ *  masterの開始したtransactionをrollbackする
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
+func masterRollback(c *gin.Context) error {
+	var err error
+	iFace, valid := c.Get(ckey.TxMaster)
+
+	if valid && iFace != nil {
+		tx := iFace.(*gorp.Transaction)
+		err = tx.Rollback()
+
+		// エラーじゃなければ削除
+		if err == nil {
+			c.Set(ckey.TxMaster, nil)
+		}
+	}
+	return err
+}
+
+/**************************************************************************************************/
+/*!
+ *  shardの開始したtransactionをrollbackする
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
+func shardRollback(c *gin.Context) error {
+	var err error
+	var hasError = false
+
+	iFace, valid := c.Get(ckey.TxShardMap)
+
+	if valid && iFace != nil {
+		// 取得してすべてrollbackする
+		txMap := iFace.(map[int]*gorp.Transaction)
+		for k, v := range txMap {
+			log.Debug(k, " rollback!!")
+			err = v.Rollback()
+			// 正常な場合、削除する
+			if err == nil {
+				delete(txMap, k)
+			}
+		}
+
+		// エラーが起きてなければ削除
+		if !hasError {
+			c.Set(ckey.TxShardMap, nil)
+		}
+	}
+	return err
+}
+
+/**
+ * get transaction function
+ */
+/**************************************************************************************************/
+/*!
+ *  トランザクションを取得する(開始してない場合、開始する)
+ *
+ *  \param   c       : コンテキスト
+ *  \param   isShard : trueの場合shardのDBハンドルを取得する
+ *  \param   shardId : 存在するshard ID
+ *  \return  トランザクション、エラー
+ */
+/**************************************************************************************************/
+func GetTransaction(c *gin.Context, isShard bool, shardId int) (*gorp.Transaction, error) {
+	var err error
+	var tx *gorp.Transaction
+
+	switch isShard {
+	case true:
+		// shard
+		// トランザクションを開始してない場合、開始する
+		if !isTransactonStart(c, ckey.IsShardTxStart) {
+			err = ShardAllTxStart(c)
+
+			if err != nil {
+				log.Error("shard transaction start failed!!")
+				return tx, err
+			}
+		}
+		// shard
+		iFace, valid := c.Get(ckey.TxShardMap)
+		if valid && iFace != nil {
+			sMap := iFace.(map[int]*gorp.Transaction)
+			tx = sMap[shardId]
+		}
+
+	case false:
+		// master
+		// トランザクションを開始してない場合、開始する
+		if isTransactonStart(c, ckey.IsMasterTxStart) {
+			err = MasterTxStart(c)
+
+			if err != nil {
+				log.Error("master transaction start failed!!")
+				return tx, err
+			}
+		}
+		// master
+		iFace, valid := c.Get(ckey.TxMaster)
+		if valid && iFace != nil {
+			tx = iFace.(*gorp.Transaction)
+		}
 
 	default:
-		err = errors.New("undefined db type!!")
+		// to do nothing
 	}
 
-	// shardの場合
+	if tx == nil {
+		err = errors.New("not found transaction!!")
+		log.Error(err)
+	}
+
+	return tx, err
+}
+
+func isTransactonStart(c *gin.Context, key string) bool {
+	iFace, valid := c.Get(key)
+	if valid && iFace != nil {
+		return iFace.(bool)
+	}
+	return false
+}
+
+/**
+ * get db connection function
+ */
+/**************************************************************************************************/
+/*!
+ *  各DBへのハンドルを取得する
+ *
+ *  \param   c       : コンテキスト
+ *  \param   mode    : W, R, BAK
+ *  \param   isShard : trueの場合shardのDBハンドルを取得する
+ *  \param   shardId : 存在するshard ID
+ *  \return  DBハンドル、エラー
+ */
+/**************************************************************************************************/
+func GetDBConnection(c *gin.Context, mode string, isShard bool, shardId int) (*gorp.DbMap, error) {
+	var err error
+	var conn *gorp.DbMap
+
+	switch isShard {
+	case true:
+		// shard
+		conn, err = GetDBShardConnection(c, mode, shardId)
+
+	case false:
+		// master
+		conn, err = GetDBMasterConnection(c, mode)
+
+	default:
+		// to do nothing
+	}
+
 	if conn == nil {
 		err = errors.New("not found db connection!!")
 	}
 	return conn, err
 }
 
-func getDBShardConnection(c *gin.Context, mode string) (*xorm.Engine, error) {
-	var conn *xorm.Engine
+/**************************************************************************************************/
+/*!
+ *  masterのDBハンドルを取得する
+ *
+ *  \param   c : コンテキスト
+ *  \param   mode : W, R, BAK
+ *  \return  DBハンドル、エラー
+ */
+/**************************************************************************************************/
+func GetDBMasterConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
+	var conn *gorp.DbMap
 	var err error
 
-	// TODO:仮
-	shardId := 1
+	gc := c.Value("globalContext").(context.Context)
 
-	shardMap, err := getDBShardMap(c, mode)
+	switch mode {
+	case MODE_W:
+		conn = gc.Value(ckey.DbMasterW).(*gorp.DbMap)
+
+	case MODE_R:
+		slaveIndex := c.Value(ckey.SlaveIndex).(int)
+		masterRs := gc.Value(ckey.DbMasterRs).([]*gorp.DbMap)
+		conn = masterRs[slaveIndex]
+
+	case MODE_BAK:
+	// TODO:実装
+
+	default:
+		err = errors.New("invalid mode!!")
+	}
+
+	//
+	if conn == nil {
+		err = errors.New("connection is nil!!")
+	}
+
+	return conn, err
+}
+
+/**************************************************************************************************/
+/*!
+ *  指定したShardIDのハンドルを取得する
+ *
+ *  \param   c : コンテキスト
+ *  \param   mode : W, R, BAK
+ *  \param   shardId : shard ID
+ *  \return  DBハンドル、エラー
+ */
+/**************************************************************************************************/
+func GetDBShardConnection(c *gin.Context, mode string, shardId int) (*gorp.DbMap, error) {
+	var conn *gorp.DbMap
+	var err error
+
+	shardMap, err := GetDBShardMap(c, mode)
 	if err != nil {
 		return nil, err
 	}
@@ -217,19 +583,28 @@ func getDBShardConnection(c *gin.Context, mode string) (*xorm.Engine, error) {
 	return conn, err
 }
 
-func getDBShardMap(c *gin.Context, mode string) (map[int]*xorm.Engine, error) {
+/**************************************************************************************************/
+/*!
+ *  ShardのDBハンドルマップを取得する
+ *
+ *  \param   c : コンテキスト
+ *  \param   mode : W, R, BAK
+ *  \return  DBハンドルマップ、エラー
+ */
+/**************************************************************************************************/
+func GetDBShardMap(c *gin.Context, mode string) (map[int]*gorp.DbMap, error) {
 	var err error
-	var shardMap map[int]*xorm.Engine
+	var shardMap map[int]*gorp.DbMap
 
 	gc := c.Value("globalContext").(context.Context)
 
 	switch mode {
 	case MODE_W:
-		shardMap = gc.Value("dbShardWMap").(map[int]*xorm.Engine)
+		shardMap = gc.Value(ckey.DbShardWMap).(map[int]*gorp.DbMap)
 
 	case MODE_R:
-		slaveIndex := c.Value("slaveIndex").(int)
-		dbShardRMaps := gc.Value("dbShardRMaps").([]map[int]*xorm.Engine)
+		slaveIndex := c.Value(ckey.SlaveIndex).(int)
+		dbShardRMaps := gc.Value(ckey.DbShardRMaps).([]map[int]*gorp.DbMap)
 		shardMap = dbShardRMaps[slaveIndex]
 
 	case MODE_BAK:
@@ -239,109 +614,4 @@ func getDBShardMap(c *gin.Context, mode string) (map[int]*xorm.Engine, error) {
 		err = errors.New("invalid mode!!")
 	}
 	return shardMap, err
-}
-
-func GetDBSession(c *gin.Context) (*xorm.Session, error) {
-
-	// TODO:仮
-	shardId := 1
-
-	var err error
-	var tx *xorm.Session
-
-	// セッションを開始してない場合はエラーとしておく
-	iFace, valid := c.Get("txMap")
-	if valid {
-		sMap := iFace.(map[int]*xorm.Session)
-		tx = sMap[shardId]
-	} else {
-		err = errors.New("transaction not found!!")
-	}
-
-	return tx, err
-}
-
-type shardType int
-
-const (
-	USER shardType = iota
-	GROUP
-)
-
-// table
-type UserShard struct {
-	Id      int `xorm:"pk"`
-	ShardId int
-}
-
-// とりあえずshard_idを取得する
-func GetShardId(c *gin.Context, st shardType, value int) (int, error) {
-	var shardId int
-	var err error
-
-	gc := c.Value("globalContext").(context.Context)
-
-	switch st {
-	case USER:
-		// TODO:slaveのmasterは複数在るはず
-		conn := gc.Value("dbMasterR").(*xorm.Engine)
-		us := UserShard{Id: value}
-		_, err = conn.Get(&us)
-		if err != nil {
-			err = errors.New("not found user shard id!!")
-			break
-		}
-		shardId = us.ShardId
-
-	case GROUP:
-		// TODO:実装
-	default:
-		err = errors.New("undefined shard type!!")
-	}
-
-	return shardId, err
-}
-
-// 使うslaveを決める
-func DecideUseSlave() int {
-	slaveIndex := rand.Intn(len(slaveWeights))
-	return slaveWeights[slaveIndex]
-}
-
-// エラー表示
-func checkErr(err error, msg string) {
-	if err != nil {
-		log.Error(msg, err)
-	}
-}
-
-func optionCheck(options ...interface{}) (string, bool, error) {
-	var err error
-
-	var mode = MODE_R
-	var isForUpdate bool
-
-	for _, v := range options {
-
-		switch v.(type) {
-		case string:
-			str := v.(string)
-			if str == MODE_W || str == MODE_R || str == MODE_BAK {
-				mode = str
-			} else if str == FOR_UPDATE {
-				isForUpdate = true
-			} else {
-				err = errors.New("unknown option!!")
-				break
-			}
-
-		default:
-			err = errors.New("can not check this type!!")
-			log.Error(v)
-			break
-		}
-	}
-	log.Info(mode)
-	log.Info(isForUpdate)
-	return mode, isForUpdate, err
 }

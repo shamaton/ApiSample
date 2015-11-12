@@ -1,20 +1,19 @@
 package controller
 
 import (
-	"sample/shamoto/model_"
+	"sample/model"
 
-	"github.com/gin-gonic/gin"
 	log "github.com/cihub/seelog"
+	"github.com/gin-gonic/gin"
 	"net/http"
 )
 
 func Shamoto(c *gin.Context) {
 
-	userRepo := model_.NewUserRepo()
-	user := userRepo.FindByID(3)
+	userRepo := model.NewUserRepo()
+	user, _ := userRepo.FindByID(c, 3)
 
 	log.Info(user)
-
 
 	c.String(http.StatusOK, "hi!!")
 }

@@ -2,7 +2,6 @@ package controller
 
 import (
 	"net/http"
-	"sample/DBI"
 	"sample/model"
 
 	"crypto/hmac"
@@ -13,8 +12,10 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
-	"github.com/go-xorm/core"
+	"github.com/k0kubun/pp"
 	"golang.org/x/net/context"
+	db "sample/DBI"
+	"time"
 )
 
 // JSON from POST
@@ -29,6 +30,7 @@ type postData struct {
 }
 
 func Test(c *gin.Context) {
+	defer db.RollBack(c)
 
 	var json PostJSON
 	err := c.BindJSON(&json)
@@ -39,51 +41,75 @@ func Test(c *gin.Context) {
 	ctx := c.Value("globalContext").(context.Context)
 
 	// データをselect
-	res, _ := model.Find(c, 3)
-	log.Info(res)
+	userRepo := model.NewUserRepo()
+	user, err := userRepo.FindByID(c, 2)
+	if checkErr(c, err, "user error") {
+		return
+	}
 
-	// shard_id test
-	shardId, _ := DBI.GetShardId(c, DBI.USER, 2)
-	log.Info(shardId)
+	log.Debug(pp.Println(user))
 
 	// use redis
 	redisTest(ctx)
 
-	// データをupdate
-	DBI.StartTx(c)
-	defer DBI.RollBack(c)
-
-	tx, err := DBI.GetDBSession(c)
-	if checkErr(c, err, "begin error") {
+	// update test
+	user, err = userRepo.FindByID(c, 3, db.FOR_UPDATE)
+	if checkErr(c, err, "user for update error") {
 		return
 	}
+	log.Debug(user)
 
-	var u []model.User
-	err = tx.Where("id = ?", 3).ForUpdate().Find(&u)
-	if checkErr(c, err, "user not found") {
+	time.Sleep(1 * time.Second)
+
+	userRepo.Update(nil)
+
+	var option = model.Option{"mode": db.MODE_R, "for_update": 1, "shard_id": 2}
+	user, err = userRepo.FindByID(c, 2, option)
+	if checkErr(c, err, "user for update error") {
 		return
 	}
+	log.Debug(user)
 
-	user := u[0]
-	user.Score += 1
+	userRepo.FindsTest(c)
 
-	//time.Sleep(3 * time.Second)
+	/*
+		// データをupdate
+		DBI.StartTx(c)
+		defer DBI.RollBack(c)
 
-	//res, e := session.Id(user.Id).Cols("score").Update(&user) // 単一 PK
-	_, err = tx.Id(core.PK{user.Id, user.Name}).Update(&user) // 複合PK
-	if checkErr(c, err, "update error") {
-		return
-	}
+		tx, err := DBI.GetDBSession(c)
+		if checkErr(c, err, "begin error") {
+			return
+		}
 
-	DBI.Commit(c)
+		var u []model.User
+		err = tx.Where("id = ?", 3).ForUpdate().Find(&u)
+		if checkErr(c, err, "user not found") {
+			return
+		}
+
+		user := u[0]
+		user.Score += 1
+
+		//time.Sleep(3 * time.Second)
+
+		//res, e := session.Id(user.Id).Cols("score").Update(&user) // 単一 PK
+		_, err = tx.Id(core.PK{user.Id, user.Name}).Update(&user) // 複合PK
+		if checkErr(c, err, "update error") {
+			return
+		}
+
+		DBI.Commit(c)
+	*/
 
 	/*
 		err = session.Commit()
 		if checkErr(c, err, "commit error") {
 			return
 		}*/
+	db.Commit(c)
 
-	c.JSON(http.StatusOK, &user)
+	c.JSON(http.StatusOK, user)
 }
 
 func TokenTest(c *gin.Context) {
@@ -131,8 +157,9 @@ func redisTest(ctx context.Context) {
 	s, err := redis.String(redis_conn.Do("GET", "message"))
 	if err != nil {
 		log.Error("get message not found...", err)
+	} else {
+		log.Info(s)
 	}
-	log.Info(s)
 
 	_, err = redis_conn.Do("SET", "message", "this is value")
 	if err != nil {

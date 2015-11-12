@@ -19,11 +19,13 @@ type ServerConfig struct {
 type SlaveServer struct {
 	Weight int    `toml:"weight"`
 	Host   string `toml:"host"`
+	Port   string `toml:"port"`
 }
 
 type DbConfig struct {
-	User string `toml:"user"`
-	Pass string `toml:"pass"`
+	User  string `toml:"user"`
+	Pass  string `toml:"pass"`
+	Shard int    `toml:"shard"`
 }
 
 type KvsConfig struct {

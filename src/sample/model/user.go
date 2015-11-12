@@ -1,63 +1,64 @@
 package model
 
 import (
-	"sample/DBI"
-
-	log "github.com/cihub/seelog"
+	"github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 )
 
 type User struct {
-	Id    int    `xorm:"pk"`
-	Name  string `xorm:"pk"`
+	Id    int `base:"pk" shard:"true"`
+	Name  string
 	Score int
-	//Hoge int32   //`db:"score, [primarykey, autoincrement]"` 変数名とカラム名が異なる場合JSON的に書ける
 }
 
-type UserTable struct {
-	*User
-	*modelBase
+// user
+/////////////////////////////
+type UserRepo interface {
+	FindByID(*gin.Context, int, ...interface{}) (*User, error)
+
+	Update(map[string]interface{})
+
+	// test
+	FindsTest(*gin.Context)
 }
 
-var (
-	m modelBase = modelBase{shard: true}
-)
+func NewUserRepo() UserRepo {
+	b := &base{table: "user"}
+	return UserRepoImpl{b}
+}
 
-func Find(c *gin.Context, userId int, options ...interface{}) (User, error) {
-	var user User
+type UserRepoImpl struct {
+	*base
+}
 
-	h, err := DBI.GetDBConnection(c, "user", options...)
-	if err != nil {
-		return user, err
-	}
-
-	// データをselect
-	user.Id = userId
-	_, err = h.Get(&user)
-
-	//var user User
-	//_, err := h.Id(userId).Get(&user)
-
+func (r UserRepoImpl) FindByID(c *gin.Context, id int, options ...interface{}) (*User, error) {
+	var user = new(User)
+	user.Id = id
+	err := r.Find(c, user, options...)
 	return user, err
-
 }
 
-func FindForUpdate(c *gin.Context, userId int, options ...interface{}) (User, error) {
-	var user User
+func (r UserRepoImpl) FindsTest(c *gin.Context) {
+	var users []User
 
-	tx, err := DBI.GetDBSession(c)
-	if err != nil {
-		return user, err
+	whereCond := WhereCondition{
+		{"id", "<=", 1, "OR"},
+		{"id", ">", 2},
+		//{"id", "IN", In{1, 2, 3, 4}},
+		//{"name", "LIKE", "%aaa%"},
 	}
-
-	var u []User
-	err = tx.Where("id = ?", userId).ForUpdate().Find(&u)
-	if err != nil {
-		log.Error(err)
-		return user, err
+	orderCond := OrderByCondition{
+		{"id", "ASC"},
+		{"score", "ASC"},
 	}
+	var condition = Condition{"where": whereCond, "order": orderCond}
 
-	user = u[0]
+	var option = Option{"shard_id": 1}
 
-	return user, err
+	r.Finds(c, &users, condition, option)
+	seelog.Debug(&users)
+
+	var hoges []User
+	r.Finds(c, &hoges, Condition{}, option)
+	seelog.Debug(&hoges)
 }

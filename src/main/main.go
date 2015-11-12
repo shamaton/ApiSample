@@ -1,9 +1,6 @@
 package main
 
 import (
-	"sample/DBI"
-	"sample/conf/gameConf"
-	"sample/controller"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -15,7 +12,10 @@ import (
 	"github.com/garyburd/redigo/redis"
 	"math/rand"
 	"os"
-	"sample/shamoto/core"
+
+	"sample/DBI"
+	"sample/conf/gameConf"
+	"sample/controller"
 )
 
 // global
@@ -65,11 +65,11 @@ func Custom() gin.HandlerFunc {
 
 		// リクエスト後処理
 		latency := time.Since(t)
-		log.Info(latency)
+		log.Info("latency : ", latency)
 
 		// access the status we are sending
-		status := c.Writer.Status()
-		log.Info(status)
+		// status := c.Writer.Status()
+		// log.Info(status)
 	}
 }
 
@@ -114,6 +114,7 @@ func loadGameConfig() *gameConf.GameConfig {
 }
 
 func main() {
+	var err error
 	// context
 	ctx = context.Background()
 
@@ -124,7 +125,11 @@ func main() {
 	ctx = context.WithValue(ctx, "gameConf", gameConf)
 
 	// db
-	ctx = DBI.BuildInstances(ctx)
+	ctx, err = DBI.BuildInstances(ctx)
+	if err != nil {
+		log.Critical("init DB failed!!")
+		os.Exit(1)
+	}
 
 	// redis
 	redis_pool := newPool(gameConf)
@@ -135,13 +140,11 @@ func main() {
 
 	// make route
 	router.POST("/test", controller.Test)
-	//router.POST("/test", controller.Test2)
 	router.POST("/token_test", controller.TokenTest)
 
-	core.InitDb()
 	router.GET("/shamoto", controller.Shamoto)
 
-	err := router.Run(":9999")
+	err = router.Run(":9999")
 
 	// 存在しないルート時
 	if err != nil {
