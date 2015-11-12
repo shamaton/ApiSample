@@ -59,14 +59,24 @@ func Test(c *gin.Context) {
 	}
 	log.Debug(user)
 
+	prevUser := *user
+	//prevUser.Score += 100
+
 	user.Score += 100
-	err = userRepo.Update(c, user)
+
+	if &prevUser == user {
+		log.Info("same ------->")
+	}
+
+	log.Info("n : ", user, " p : ", prevUser)
+
+	err = userRepo.Update(c, user, &prevUser)
 	if checkErr(c, err, "user for update error") {
 		return
 	}
 	db.Commit(c)
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(0 * time.Second)
 
 	var option = model.Option{"mode": db.MODE_R, "for_update": 1, "shard_id": 2}
 	user, err = userRepo.FindByID(c, 2, option)

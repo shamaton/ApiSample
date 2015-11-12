@@ -233,19 +233,29 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
  *  \return  where文, where引数、orderBy用配列、エラー
  */
 /**************************************************************************************************/
-func (b *base) Update(c *gin.Context, holder interface{}, prevHolder ...interface{}) error {
+func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interface{}) error {
 	//return 0, nil
 
 	var err error
 
+	// 過去データは1つしか想定してない
+	if len(prevHolders) > 1 {
+		err = errors.New("enable set 1 prevData only!!")
+		return err
+	}
+
 	// 更新前のデータがある場合比較する
 	// データの更新はないけど、データ更新がなかったという更新(update_at)のみしたい場合は...?
-	/*
-		if prevHolder == holder {
+	for _, v := range prevHolders {
+		nv := reflect.ValueOf(holder).Elem()
+		pv := reflect.ValueOf(v).Elem()
+		if nv.Interface() == pv.Interface() {
 			// 更新の必要なし
-			return err
+			log.Info("this data is same.")
+			//return err
 		}
-	*/
+	}
+
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
@@ -257,7 +267,31 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolder ...interfac
 		return err
 	}
 
-	// TODO: 更新前のデータがある場合、更新すべき値を抽出する
+	// 更新前のデータがある場合、更新すべき値を抽出する
+	for _, v := range prevHolders {
+		pv := reflect.ValueOf(v).Elem()
+		for i := 0; i < pv.NumField(); i++ {
+			// 変数定義
+			field := pv.Type().Field(i)
+			// 実値
+			value := pv.Field(i).Interface()
+
+			// カラム
+			column := strings.ToLower(field.Name)
+
+			// mapに存在するものだけチェックしていく
+			mv, ok := valueMap[column]
+			if ok && mv == value {
+				log.Info(column, " is same!!")
+				delete(valueMap, column)
+				// 空になった時点で更新する必要なし
+				if len(valueMap) < 1 {
+					log.Info("valueMap is empty")
+					return nil
+				}
+			}
+		}
+	}
 
 	// shardの場合、shard_idを取得
 	shardId, err := b.getShardIdByShardKey(c, shardKey, dbTableConf)
