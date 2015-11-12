@@ -74,6 +74,12 @@ func Test(c *gin.Context) {
 	if checkErr(c, err, "user for update error") {
 		return
 	}
+
+	err = userRepo.Create(c, &prevUser)
+	if checkErr(c, err, "user insert error") {
+		return
+	}
+
 	db.Commit(c)
 
 	time.Sleep(0 * time.Second)

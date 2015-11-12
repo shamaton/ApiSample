@@ -6,9 +6,11 @@ import (
 )
 
 type User struct {
-	Id    int `base:"pk" shard:"true"`
-	Name  string
-	Score int
+	Id         int `pk:"true" shard:"true"`
+	Name       string
+	Score      int
+	Created_at uint //`col:"created_at"`
+	Updated_at uint //`col:"updated_at"`
 }
 
 // user
@@ -17,6 +19,7 @@ type UserRepo interface {
 	FindByID(*gin.Context, int, ...interface{}) (*User, error)
 
 	Update(*gin.Context, interface{}, ...interface{}) error
+	Create(*gin.Context, interface{}) error
 
 	// test
 	FindsTest(*gin.Context)

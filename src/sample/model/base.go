@@ -25,6 +25,7 @@ type Base interface {
 	Finds(*gin.Context, interface{}, Condition, ...interface{}) error
 
 	Update(*gin.Context, interface{}, ...interface{}) error
+	Create(*gin.Context, interface{}) error
 }
 
 type base struct {
@@ -156,8 +157,13 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 	for i := 0; i < structRef.NumField(); i++ {
 		field := structRef.Field(i)
 
-		// カラム
-		column := strings.ToLower(field.Name)
+		var column string
+		// タグがある場合は優先する
+		if len(field.Tag.Get("col")) > 0 {
+			column = field.Tag.Get("col")
+		} else {
+			column = strings.ToLower(field.Name)
+		}
 		columns = append(columns, column)
 	}
 
@@ -234,8 +240,6 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
  */
 /**************************************************************************************************/
 func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interface{}) error {
-	//return 0, nil
-
 	var err error
 
 	// 過去データは1つしか想定してない
@@ -320,7 +324,58 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
 /**
  *  Create method
  */
-func Create() {
+func (b *base) Create(c *gin.Context, holder interface{}) error {
+
+	var err error
+
+	// db_table_confから属性を把握
+	dbTableConfRepo := NewDbTableConfRepo()
+	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+
+	// holderから各要素を取得
+	_, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	if err != nil {
+		log.Error("read error in struct data")
+		return err
+	}
+
+	// shardの場合、shard_idを取得
+	shardId, err := b.getShardIdByShardKey(c, shardKey, dbTableConf)
+	if err != nil {
+		return err
+	}
+
+	// TODO:pkのチェックするか検討
+
+	// values収集
+	var values []interface{}
+	for _, v := range pkMap {
+		values = append(values, v)
+	}
+	for _, v := range valueMap {
+		values = append(values, v)
+	}
+
+	// SQL生成
+	sql, args, err := builder.Insert(b.table).Options("IGNORE").Values(values...).ToSql()
+	//sql, args, err := builder.Insert(b.table).Values(values...).ToSql()
+	if err != nil {
+		log.Error("sql maker error!!")
+		return err
+	}
+	// tx
+	tx, err := db.GetTransaction(c, dbTableConf.IsUseTypeShard(), shardId)
+	if err != nil {
+		log.Error("transaction error!!")
+		return err
+	}
+	// UPDATE(tx.Insertは要マッピングなので使わない)
+	log.Critical(sql, args)
+	_, err = tx.Exec(sql, args...)
+	return err
+}
+
+func CreateMulti() {
 
 }
 
@@ -330,7 +385,6 @@ func Create() {
 func Delete() {
 
 }
-
 
 /**
  *  Save method
@@ -382,11 +436,18 @@ func (b *base) getTableInfoFromStructData(holder interface{}, dbTableConf *DbTab
 		value := val.Field(i).Interface()
 
 		// カラム
-		column := strings.ToLower(field.Name)
+		var column string
+		// タグがある場合は優先する
+		if len(tag.Get("col")) > 0 {
+			column = tag.Get("col")
+		} else {
+			column = strings.ToLower(field.Name)
+		}
+
 		columns = append(columns, column)
 
 		// PKは検索条件とし、それ以外は値を取得する
-		if tag.Get("base") == "pk" {
+		if tag.Get("pk") == "true" {
 			pkMap[column] = value
 		} else {
 			valueMap[column] = value
