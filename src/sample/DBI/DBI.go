@@ -297,6 +297,7 @@ func masterCommit(c *gin.Context) error {
 		// エラーじゃなければ削除
 		if err == nil {
 			c.Set(ckey.TxMaster, nil)
+			c.Set(ckey.IsMasterTxStart, false)
 		}
 	}
 	return err
@@ -331,6 +332,7 @@ func shardCommit(c *gin.Context) error {
 		// エラーが起きてなければ削除
 		if !hasError {
 			c.Set(ckey.TxShardMap, nil)
+			c.Set(ckey.IsShardTxStart, false)
 		}
 	}
 	return err
@@ -476,6 +478,15 @@ func GetTransaction(c *gin.Context, isShard bool, shardId int) (*gorp.Transactio
 	return tx, err
 }
 
+/**************************************************************************************************/
+/*!
+ *  トランザクションを開始したか確認する
+ *
+ *  \param   c      : コンテキスト
+ *  \param   key    : コンテキスト内キー
+ *  \return  true/false
+ */
+/**************************************************************************************************/
 func isTransactonStart(c *gin.Context, key string) bool {
 	iFace, valid := c.Get(key)
 	if valid && iFace != nil {
