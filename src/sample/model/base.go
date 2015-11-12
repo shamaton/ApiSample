@@ -331,6 +331,14 @@ func Delete() {
 
 }
 
+
+/**
+ *  Save method
+ */
+func Save() {
+
+}
+
 /*
 func (b *base) FindBySelectBuilder(c *gin.Context, holder interface{}, sb builder.SelectBuilder, isForUpdate bool) error {
 	sql, args, _ := sb.ToSql()
