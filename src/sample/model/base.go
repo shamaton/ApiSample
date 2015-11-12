@@ -355,8 +355,8 @@ func (b *base) conditionCheck(condition map[string]interface{}) (string, []inter
  *  \return  where文, where引数、エラー
  */
 /**************************************************************************************************/
-const whereConditionMin = 3
-const whereConditionMax = 4
+const whereConditionMin = 3 //<! whereConditionの最小長
+const whereConditionMax = 4 //<! whereConditionの最大長
 
 func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) {
 	var err error
@@ -474,7 +474,7 @@ func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) 
  *  \return  orderBy用配列、エラー
  */
 /**************************************************************************************************/
-const orderCondition = 2
+const orderCondition = 2 //<! orderConditionの長さ
 
 func (b *base) orderSyntaxAnalyze(i interface{}) ([]string, error) {
 	var err error
