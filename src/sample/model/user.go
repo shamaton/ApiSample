@@ -6,11 +6,11 @@ import (
 )
 
 type User struct {
-	Id         int `pk:"true" shard:"true"`
-	Name       string
-	Score      int
-	Created_at uint //`col:"created_at"`
-	Updated_at uint //`col:"updated_at"`
+	Id        int `pk:"true" shard:"true"`
+	Name      string
+	Score     int
+	CreatedAt uint `db:"created_at"`
+	UpdatedAt uint `db:"updated_at"`
 }
 
 // user

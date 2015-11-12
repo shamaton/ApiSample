@@ -159,8 +159,8 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 
 		var column string
 		// タグがある場合は優先する
-		if len(field.Tag.Get("col")) > 0 {
-			column = field.Tag.Get("col")
+		if len(field.Tag.Get("db")) > 0 {
+			column = field.Tag.Get("db")
 		} else {
 			column = strings.ToLower(field.Name)
 		}
@@ -438,8 +438,8 @@ func (b *base) getTableInfoFromStructData(holder interface{}, dbTableConf *DbTab
 		// カラム
 		var column string
 		// タグがある場合は優先する
-		if len(tag.Get("col")) > 0 {
-			column = tag.Get("col")
+		if len(tag.Get("db")) > 0 {
+			column = tag.Get("db")
 		} else {
 			column = strings.ToLower(field.Name)
 		}

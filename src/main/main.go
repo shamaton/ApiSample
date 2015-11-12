@@ -13,9 +13,12 @@ import (
 	"math/rand"
 	"os"
 
+	"gopkg.in/gorp.v1"
 	"sample/DBI"
+	ckey "sample/conf/context"
 	"sample/conf/gameConf"
 	"sample/controller"
+	"sample/model"
 )
 
 // global
@@ -85,6 +88,24 @@ func setLoggerConfig() {
 
 }
 
+func setDbMap() {
+	// shard
+	a := ctx.Value(ckey.DbShardWMap).(map[int]*gorp.DbMap)
+
+	for _, v := range a {
+		v.AddTable(model.User{})
+	}
+
+	b := ctx.Value(ckey.DbShardRMaps).([]map[int]*gorp.DbMap)
+
+	for _, m := range b {
+		for _, v := range m {
+			v.AddTable(model.User{})
+		}
+	}
+	log.Info("set db MAP!!")
+}
+
 func loadGameConfig() *gameConf.GameConfig {
 	var gameConf gameConf.GameConfig
 
@@ -130,6 +151,7 @@ func main() {
 		log.Critical("init DB failed!!")
 		os.Exit(1)
 	}
+	setDbMap()
 
 	// redis
 	redis_pool := newPool(gameConf)
