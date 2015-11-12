@@ -252,7 +252,7 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
 		if nv.Interface() == pv.Interface() {
 			// 更新の必要なし
 			log.Info("this data is same.")
-			//return err
+			return err
 		}
 	}
 
