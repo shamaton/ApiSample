@@ -59,16 +59,22 @@ func Test(c *gin.Context) {
 	}
 	log.Debug(user)
 
-	time.Sleep(1 * time.Second)
-
-	userRepo.Update(nil)
-
-	var option = model.Option{"mode": db.MODE_R, "for_update": 1, "shard_id": 2}
-	user, err = userRepo.FindByID(c, 2, option)
+	user.Score += 100
+	err = userRepo.Update(c, user)
 	if checkErr(c, err, "user for update error") {
 		return
 	}
+
+	time.Sleep(1 * time.Second)
+
+	var option = model.Option{"mode": db.MODE_R, "for_update": 1, "shard_id": 2}
+	user, err = userRepo.FindByID(c, 2, option)
+	if checkErr(c, err, "user for select error") {
+		return
+	}
 	log.Debug(user)
+
+	db.Commit(c)
 
 	userRepo.FindsTest(c)
 
@@ -107,7 +113,6 @@ func Test(c *gin.Context) {
 		if checkErr(c, err, "commit error") {
 			return
 		}*/
-	db.Commit(c)
 
 	c.JSON(http.StatusOK, user)
 }
