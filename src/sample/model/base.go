@@ -674,20 +674,6 @@ func (b *base) Count(c *gin.Context, condition map[string]interface{}, options .
 	return count, err
 }
 
-/*
-func (b *base) FindBySelectBuilder(c *gin.Context, holder interface{}, sb builder.SelectBuilder, isForUpdate bool) error {
-	sql, args, _ := sb.ToSql()
-	dbMap, err := DBI.GetDBConnection(c, "table_name")
-	if err != nil {
-		log.Error("db error!!")
-		return err
-	}
-
-	err = dbMap.SelectOne(holder, sql, args...)
-	return err
-}
-*/
-
 /**************************************************************************************************/
 /*!
  *  データ構造体からDBに関連する各種情報を取得する
