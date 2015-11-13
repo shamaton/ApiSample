@@ -997,7 +997,7 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 	var shardKey interface{}
 	var shardId int
 
-	var optionMap map[string]interface{}
+	var optionMap Option
 
 	for _, v := range options {
 

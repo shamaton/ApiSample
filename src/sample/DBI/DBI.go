@@ -23,23 +23,14 @@ var (
 	shardIds     []int
 )
 
-// TODO:この辺ちゃんとする
+/**
+ * DB MODE
+ */
 const (
 	MODE_W   = "W"   // master
 	MODE_R   = "R"   // slave
 	MODE_BAK = "BAK" // backup
 )
-
-const (
-	FOR_UPDATE = "FOR_UPDATE"
-)
-
-type DBIRepo struct {
-}
-
-func NewDBIRepo() *DBIRepo {
-	return new(DBIRepo)
-}
 
 /**************************************************************************************************/
 /*!
