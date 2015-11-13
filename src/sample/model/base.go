@@ -80,23 +80,13 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 	}
 	sql, args, err := sb.ToSql()
 
-	// とりあえず分けてみる
-	if isForUpdate {
-		tx, err := db.GetTransaction(c, dbTableConf.IsUseTypeShard(), shardId)
-		if err != nil {
-			log.Error("transaction error!!")
-			return err
-		}
-		err = tx.SelectOne(holder, sql, args...)
-	} else {
-		dbMap, err := db.GetDBConnection(c, mode, dbTableConf.IsUseTypeShard(), shardId)
-		if err != nil {
-			log.Error("db connection error!!")
-			return err
-		}
-		// fetch
-		err = dbMap.SelectOne(holder, sql, args...)
+	// fetch
+	tx, err := db.GetTransaction(c, mode, dbTableConf.IsUseTypeShard(), shardId)
+	if err != nil {
+		log.Error("transaction error!!")
+		return err
 	}
+	err = tx.SelectOne(holder, sql, args...)
 
 	// TODO:デバッグでは通常selectで複数行取得されないことも確認する
 	return err
@@ -124,7 +114,7 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 		return err
 	}
 
-	mode, isForUpdate, shardKey, shardId, err := b.optionCheck(options...)
+	mode, _, shardKey, shardId, err := b.optionCheck(options...) // isForUpdateは封印
 	if err != nil {
 		log.Error("invalid options set!!")
 		return err
@@ -197,25 +187,13 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 	sql, args, err := sb.ToSql()
 	log.Debug(sql)
 
-	// とりあえず分けてみる
-	// TODO:ここのforupdateどうするか
-	if isForUpdate {
-		tx, err := db.GetTransaction(c, dbTableConf.IsUseTypeShard(), shardId)
-		if err != nil {
-			log.Error("transaction error!!")
-			return err
-		}
-		// select
-		_, err = tx.Select(holders, sql, args...)
-	} else {
-		dbMap, err := db.GetDBConnection(c, mode, dbTableConf.IsUseTypeShard(), shardId)
-		if err != nil {
-			log.Error("db connection error!!")
-			return err
-		}
-		// select
-		_, err = dbMap.Select(holders, sql, args...)
+	// select
+	tx, err := db.GetTransaction(c, mode, dbTableConf.IsUseTypeShard(), shardId)
+	if err != nil {
+		log.Error("transaction error!!")
+		return err
 	}
+	_, err = tx.Select(holders, sql, args...)
 
 	return err
 }
@@ -305,7 +283,7 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
 		return err
 	}
 	// tx
-	tx, err := db.GetTransaction(c, dbTableConf.IsUseTypeShard(), shardId)
+	tx, err := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
 	if err != nil {
 		log.Error("transaction error!!")
 		return err
@@ -359,7 +337,7 @@ func (b *base) Create(c *gin.Context, holder interface{}) error {
 		return err
 	}
 	// tx
-	tx, err := db.GetTransaction(c, dbTableConf.IsUseTypeShard(), shardId)
+	tx, err := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
 	if err != nil {
 		log.Error("transaction error!!")
 		return err
