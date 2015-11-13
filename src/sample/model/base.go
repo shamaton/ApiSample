@@ -22,9 +22,10 @@ type In []interface{}
 //////////////////////////////
 type Base interface {
 	Find(*gin.Context, interface{}, ...interface{}) error
-	Finds(c *gin.Context, holders interface{}, condition Condition, options ...interface{}) error
+	Finds(*gin.Context, interface{}, Condition, ...interface{}) error
 
-	Update(map[string]interface{})
+	Update(*gin.Context, interface{}, ...interface{}) error
+	Create(*gin.Context, interface{}) error
 }
 
 type base struct {
@@ -57,58 +58,17 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 	dbTableConfRepo := NewDbTableConfRepo()
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
 
-	// holder(table struct)からカラム情報を取得
-	var columns []string
-	var shardKey interface{}
-
-	// pkはwhere条件に必ず使う
-	var pkMap = builder.Eq{}
-
-	val := reflect.ValueOf(holder).Elem()
-	for i := 0; i < val.NumField(); i++ {
-		valueField := val.Field(i)
-		typeField := val.Type().Field(i)
-		tag := typeField.Tag
-
-		// カラム
-		column := strings.ToLower(typeField.Name)
-		columns = append(columns, column)
-
-		// プライマリキー
-		if tag.Get("base") == "pk" {
-			pkMap[column] = valueField.Interface()
-		}
-
-		// shard keyを取得
-		if dbTableConf.IsUseTypeShard() && tag.Get("shard") == "true" {
-			// 2度設定はダメ
-			if shardKey != nil {
-				return errors.New("multiple shard key not available!!")
-			}
-			shardKey = valueField.Interface()
-		}
-	}
-
-	// pkMapをチェックしておく
-	if len(pkMap) < 1 {
-		err = errors.New("must be set pks in struct!!")
-		log.Error(err)
+	// holderから各要素を取得
+	columns, _, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	if err != nil {
+		log.Error("read error in struct data")
 		return err
 	}
 
 	// shardの場合、shard_idを取得
-	var shardId int
-	if dbTableConf.IsUseTypeShard() {
-		// value check
-		if shardKey == nil {
-			return errors.New("not set shard_key!!")
-		}
-		// 検索
-		repo := NewShardRepo()
-		shardId, err = repo.findShardId(c, dbTableConf.ShardType, shardKey)
-		if err != nil {
-			return err
-		}
+	shardId, err := b.getShardIdByShardKey(c, shardKey, dbTableConf)
+	if err != nil {
+		return err
 	}
 
 	// SQL生成
@@ -197,8 +157,13 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 	for i := 0; i < structRef.NumField(); i++ {
 		field := structRef.Field(i)
 
-		// カラム
-		column := strings.ToLower(field.Name)
+		var column string
+		// タグがある場合は優先する
+		if len(field.Tag.Get("db")) > 0 {
+			column = field.Tag.Get("db")
+		} else {
+			column = strings.ToLower(field.Name)
+		}
 		columns = append(columns, column)
 	}
 
@@ -263,15 +228,154 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 /**
  *  Update method
  */
-func (b *base) Update(hoge map[string]interface{}) {
-	log.Debug(hoge)
-	log.Debug("aaaaaa")
+/**************************************************************************************************/
+/*!
+ *  PRIMARY KEYを用いたUPDATEを実行する
+ *
+ *  prevHolder(更新前データ)が存在する場合、比較して値を更新するべきものだけSETする
+ *  そうでない場合、PK以外の値全てをSETするので注意
+ *
+ *  \param   condition : where, orderに利用する条件
+ *  \return  where文, where引数、orderBy用配列、エラー
+ */
+/**************************************************************************************************/
+func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interface{}) error {
+	var err error
+
+	// 過去データは1つしか想定してない
+	if len(prevHolders) > 1 {
+		err = errors.New("enable set 1 prevData only!!")
+		return err
+	}
+
+	// 更新前のデータがある場合比較する
+	// データの更新はないけど、データ更新がなかったという更新(update_at)のみしたい場合は...?
+	for _, v := range prevHolders {
+		nv := reflect.ValueOf(holder).Elem()
+		pv := reflect.ValueOf(v).Elem()
+		if nv.Interface() == pv.Interface() {
+			// 更新の必要なし
+			log.Info("this data is same.")
+			return err
+		}
+	}
+
+	// db_table_confから属性を把握
+	dbTableConfRepo := NewDbTableConfRepo()
+	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+
+	// holderから各要素を取得
+	_, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	if err != nil {
+		log.Error("read error in struct data")
+		return err
+	}
+
+	// 更新前のデータがある場合、更新すべき値を抽出する
+	for _, v := range prevHolders {
+		pv := reflect.ValueOf(v).Elem()
+		for i := 0; i < pv.NumField(); i++ {
+			// 変数定義
+			field := pv.Type().Field(i)
+			// 実値
+			value := pv.Field(i).Interface()
+
+			// カラム
+			column := strings.ToLower(field.Name)
+
+			// mapに存在するものだけチェックしていく
+			mv, ok := valueMap[column]
+			if ok && mv == value {
+				log.Info(column, " is same!!")
+				delete(valueMap, column)
+				// 空になった時点で更新する必要なし
+				if len(valueMap) < 1 {
+					log.Info("valueMap is empty")
+					return nil
+				}
+			}
+		}
+	}
+
+	// shardの場合、shard_idを取得
+	shardId, err := b.getShardIdByShardKey(c, shardKey, dbTableConf)
+	if err != nil {
+		return err
+	}
+
+	// SQL生成
+	sql, args, err := builder.Update(b.table).SetMap(valueMap).Where(pkMap).ToSql()
+	if err != nil {
+		log.Error("sql maker error!!")
+		return err
+	}
+	// tx
+	tx, err := db.GetTransaction(c, dbTableConf.IsUseTypeShard(), shardId)
+	if err != nil {
+		log.Error("transaction error!!")
+		return err
+	}
+	// UPDATE(tx.updateはpkに対してまでsetするので使わない)
+	_, err = tx.Exec(sql, args...)
+	return err
+
 }
 
 /**
  *  Create method
  */
-func Create() {
+func (b *base) Create(c *gin.Context, holder interface{}) error {
+
+	var err error
+
+	// db_table_confから属性を把握
+	dbTableConfRepo := NewDbTableConfRepo()
+	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+
+	// holderから各要素を取得
+	_, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	if err != nil {
+		log.Error("read error in struct data")
+		return err
+	}
+
+	// shardの場合、shard_idを取得
+	shardId, err := b.getShardIdByShardKey(c, shardKey, dbTableConf)
+	if err != nil {
+		return err
+	}
+
+	// TODO:pkのチェックするか検討
+
+	// values収集
+	var values []interface{}
+	for _, v := range pkMap {
+		values = append(values, v)
+	}
+	for _, v := range valueMap {
+		values = append(values, v)
+	}
+
+	// SQL生成
+	sql, args, err := builder.Insert(b.table).Options("IGNORE").Values(values...).ToSql()
+	//sql, args, err := builder.Insert(b.table).Values(values...).ToSql()
+	if err != nil {
+		log.Error("sql maker error!!")
+		return err
+	}
+	// tx
+	tx, err := db.GetTransaction(c, dbTableConf.IsUseTypeShard(), shardId)
+	if err != nil {
+		log.Error("transaction error!!")
+		return err
+	}
+	// UPDATE(tx.Insertは要マッピングなので使わない)
+	log.Critical(sql, args)
+	_, err = tx.Exec(sql, args...)
+	return err
+}
+
+func CreateMulti() {
 
 }
 
@@ -279,6 +383,13 @@ func Create() {
  *  Delete method
  */
 func Delete() {
+
+}
+
+/**
+ *  Save method
+ */
+func Save() {
 
 }
 
@@ -295,6 +406,104 @@ func (b *base) FindBySelectBuilder(c *gin.Context, holder interface{}, sb builde
 	return err
 }
 */
+
+/**************************************************************************************************/
+/*!
+ *  データ構造体からDBに関連する各種情報を取得する
+ *
+ *  \param   holder      : テーブルデータ構造体(実体)
+ *  \param   dbTableConf : db_table_confマスタ情報
+ *  \return  カラム、pk以外の値、pkのマップ、shard検索キー、エラー
+ */
+/**************************************************************************************************/
+func (b *base) getTableInfoFromStructData(holder interface{}, dbTableConf *DbTableConf) ([]string, map[string]interface{}, builder.Eq, interface{}, error) {
+	var err error
+
+	var columns []string
+	var shardKey interface{}
+
+	var pkMap = builder.Eq{}
+	var valueMap = map[string]interface{}{}
+
+	// 実体の要素を把握する
+	val := reflect.ValueOf(holder).Elem()
+	for i := 0; i < val.NumField(); i++ {
+		// 変数定義
+		field := val.Type().Field(i)
+		// タグ設定
+		tag := field.Tag
+		// 実値
+		value := val.Field(i).Interface()
+
+		// カラム
+		var column string
+		// タグがある場合は優先する
+		if len(tag.Get("db")) > 0 {
+			column = tag.Get("db")
+		} else {
+			column = strings.ToLower(field.Name)
+		}
+
+		columns = append(columns, column)
+
+		// PKは検索条件とし、それ以外は値を取得する
+		if tag.Get("pk") == "true" {
+			pkMap[column] = value
+		} else {
+			valueMap[column] = value
+		}
+
+		// shard keyを取得
+		if dbTableConf.IsUseTypeShard() && tag.Get("shard") == "true" {
+			// 2度設定はダメ
+			if shardKey != nil {
+				err = errors.New("multiple shard key not available!!")
+				return columns, valueMap, pkMap, shardKey, err
+			}
+			shardKey = value
+		}
+	}
+
+	// pkMapをチェックしておく
+	if len(pkMap) < 1 {
+		err = errors.New("must be set pks in struct!!")
+		return columns, valueMap, pkMap, shardKey, err
+	}
+
+	return columns, valueMap, pkMap, shardKey, err
+}
+
+/**************************************************************************************************/
+/*!
+ *  shard keyからshard idを取得する
+ *
+ *  \param   holder      : テーブルデータ構造体(実体)
+ *  \param   dbTableConf : db_table_confマスタ情報
+ *  \return  カラム、pk以外の値、pkのマップ、shard検索キー、エラー
+ */
+/**************************************************************************************************/
+func (b *base) getShardIdByShardKey(c *gin.Context, shardKey interface{}, dbTableConf *DbTableConf) (int, error) {
+	var err error
+	var shardId int
+
+	// masterの場合は何もしない
+	if dbTableConf.IsUseTypeMaster() {
+		return shardId, err
+	}
+
+	// value check
+	if shardKey == nil {
+		err = errors.New("not set shard_key!!")
+		return shardId, err
+	}
+	// 検索
+	repo := NewShardRepo()
+	shardId, err = repo.findShardId(c, dbTableConf.ShardType, shardKey)
+	if err != nil {
+		return shardId, err
+	}
+	return shardId, err
+}
 
 /**************************************************************************************************/
 /*!
@@ -355,8 +564,8 @@ func (b *base) conditionCheck(condition map[string]interface{}) (string, []inter
  *  \return  where文, where引数、エラー
  */
 /**************************************************************************************************/
-const whereConditionMin = 3
-const whereConditionMax = 4
+const whereConditionMin = 3 //<! whereConditionの最小長
+const whereConditionMax = 4 //<! whereConditionの最大長
 
 func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) {
 	var err error
@@ -474,7 +683,7 @@ func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) 
  *  \return  orderBy用配列、エラー
  */
 /**************************************************************************************************/
-const orderCondition = 2
+const orderCondition = 2 //<! orderConditionの長さ
 
 func (b *base) orderSyntaxAnalyze(i interface{}) ([]string, error) {
 	var err error

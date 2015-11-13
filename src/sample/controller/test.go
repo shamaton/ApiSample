@@ -59,55 +59,39 @@ func Test(c *gin.Context) {
 	}
 	log.Debug(user)
 
-	time.Sleep(1 * time.Second)
+	prevUser := *user
+	//prevUser.Score += 100
 
-	userRepo.Update(nil)
+	user.Score += 100
+
+	if &prevUser == user {
+		log.Info("same ------->")
+	}
+
+	log.Info("n : ", user, " p : ", prevUser)
+
+	err = userRepo.Update(c, user, &prevUser)
+	if checkErr(c, err, "user for update error") {
+		return
+	}
+
+	err = userRepo.Create(c, &prevUser)
+	if checkErr(c, err, "user insert error") {
+		return
+	}
+
+	db.Commit(c)
+
+	time.Sleep(0 * time.Second)
 
 	var option = model.Option{"mode": db.MODE_R, "for_update": 1, "shard_id": 2}
 	user, err = userRepo.FindByID(c, 2, option)
-	if checkErr(c, err, "user for update error") {
+	if checkErr(c, err, "user for select error") {
 		return
 	}
 	log.Debug(user)
 
 	userRepo.FindsTest(c)
-
-	/*
-		// データをupdate
-		DBI.StartTx(c)
-		defer DBI.RollBack(c)
-
-		tx, err := DBI.GetDBSession(c)
-		if checkErr(c, err, "begin error") {
-			return
-		}
-
-		var u []model.User
-		err = tx.Where("id = ?", 3).ForUpdate().Find(&u)
-		if checkErr(c, err, "user not found") {
-			return
-		}
-
-		user := u[0]
-		user.Score += 1
-
-		//time.Sleep(3 * time.Second)
-
-		//res, e := session.Id(user.Id).Cols("score").Update(&user) // 単一 PK
-		_, err = tx.Id(core.PK{user.Id, user.Name}).Update(&user) // 複合PK
-		if checkErr(c, err, "update error") {
-			return
-		}
-
-		DBI.Commit(c)
-	*/
-
-	/*
-		err = session.Commit()
-		if checkErr(c, err, "commit error") {
-			return
-		}*/
-	db.Commit(c)
 
 	c.JSON(http.StatusOK, user)
 }

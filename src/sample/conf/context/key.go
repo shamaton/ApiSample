@@ -1,8 +1,6 @@
 package context
 
-import (
-
-)
+import ()
 
 /**
  * コンテキストで一意にするためのキー
@@ -17,15 +15,15 @@ const (
 	MemdPool = "redis"
 
 	// DB
-	DbMasterW   = "dbMasterW"
-	DbShardWMap = "dbShardWMap"
-	DbMasterRs = "dbMasterRs"
+	DbMasterW    = "dbMasterW"
+	DbShardWMap  = "dbShardWMap"
+	DbMasterRs   = "dbMasterRs"
 	DbShardRMaps = "dbShardRMaps"
-	TxMaster = "txMaster"
-	TxShardMap = "txShardMap"
+	TxMaster     = "txMaster"
+	TxShardMap   = "txShardMap"
 
 	IsMasterTxStart = "isMasterTxStart"
-	IsShardTxStart = "isShardTxStart"
+	IsShardTxStart  = "isShardTxStart"
 
 	SlaveIndex = "slaveIndex"
 )
