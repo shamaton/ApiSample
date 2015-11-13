@@ -235,6 +235,7 @@ func MasterTxStart(c *gin.Context, mode string) error {
 	if err != nil {
 		return err
 	}
+	log.Debug(mode, " master start tx!! ")
 
 	// リクエストコンテキストに保存
 	c.Set(txKey, tx)
@@ -273,7 +274,6 @@ func ShardAllTxStart(c *gin.Context, mode string) error {
 	var txMap = map[int]*gorp.Transaction{}
 	// txのマップを作成
 	for k, v := range dbMap {
-		log.Info(k, " start tx!!")
 		tx, err := v.Begin()
 
 		// エラーが起きた時点でおかしいのでreturn
@@ -281,6 +281,7 @@ func ShardAllTxStart(c *gin.Context, mode string) error {
 			return err
 		}
 		txMap[k] = tx
+		log.Debug(mode, " shard start tx!! ", k)
 	}
 
 	// リクエストコンテキストに保存
@@ -304,6 +305,9 @@ func ShardAllTxStart(c *gin.Context, mode string) error {
 func Commit(c *gin.Context) error {
 	err := masterCommit(c)
 	err = shardCommit(c)
+	// slaveでcommitすることはないのでrollbackしておく
+	err = masterRollback(c, MODE_R)
+	err = shardRollback(c, MODE_R)
 	return err
 }
 
@@ -322,6 +326,7 @@ func masterCommit(c *gin.Context) error {
 	if valid && iFace != nil {
 		tx := iFace.(*gorp.Transaction)
 		err = tx.Commit()
+		log.Debug(" master commit ")
 
 		// エラーじゃなければ削除
 		if err == nil {
@@ -350,7 +355,7 @@ func shardCommit(c *gin.Context) error {
 		// 取得してすべてcommitする
 		txMap := iFace.(map[int]*gorp.Transaction)
 		for k, v := range txMap {
-			log.Debug(k, " commit!!")
+			log.Debug(k, " shard commit!!")
 			err = v.Commit()
 			// 正常な場合、削除する
 			if err == nil {
@@ -379,8 +384,10 @@ func shardCommit(c *gin.Context) error {
  */
 /**************************************************************************************************/
 func RollBack(c *gin.Context) error {
-	err := masterRollback(c)
-	err = shardRollback(c)
+	err := masterRollback(c, MODE_W)
+	err = masterRollback(c, MODE_R)
+	err = shardRollback(c, MODE_W)
+	err = shardRollback(c, MODE_R)
 	return err
 }
 
@@ -388,21 +395,30 @@ func RollBack(c *gin.Context) error {
 /*!
  *  masterの開始したtransactionをrollbackする
  *
- *  \param   c : コンテキスト
+ *  \param   c    : コンテキスト
+ *  \param   mode : モード
  *  \return  エラー
  */
 /**************************************************************************************************/
-func masterRollback(c *gin.Context) error {
+func masterRollback(c *gin.Context, mode string) error {
 	var err error
-	iFace, valid := c.Get(ckey.TxMasterW)
+
+	isKey, txKey := ckey.IsMasterRTxStart, ckey.TxMasterR
+	if mode == MODE_W {
+		isKey, txKey = ckey.IsMasterWTxStart, ckey.TxMasterW
+	}
+
+	iFace, valid := c.Get(txKey)
 
 	if valid && iFace != nil {
 		tx := iFace.(*gorp.Transaction)
 		err = tx.Rollback()
+		log.Debug(mode, " master rollback ")
 
 		// エラーじゃなければ削除
 		if err == nil {
-			c.Set(ckey.TxMasterW, nil)
+			c.Set(txKey, nil)
+			c.Set(isKey, false)
 		}
 	}
 	return err
@@ -412,21 +428,27 @@ func masterRollback(c *gin.Context) error {
 /*!
  *  shardの開始したtransactionをrollbackする
  *
- *  \param   c : コンテキスト
+ *  \param   c    : コンテキスト
+ *  \param   mode : モード
  *  \return  エラー
  */
 /**************************************************************************************************/
-func shardRollback(c *gin.Context) error {
+func shardRollback(c *gin.Context, mode string) error {
 	var err error
 	var hasError = false
 
-	iFace, valid := c.Get(ckey.TxShardWMap)
+	isKey, txKey := ckey.IsShardRTxStart, ckey.TxShardRMap
+	if mode == MODE_W {
+		isKey, txKey = ckey.IsShardWTxStart, ckey.TxShardWMap
+	}
+
+	iFace, valid := c.Get(txKey)
 
 	if valid && iFace != nil {
 		// 取得してすべてrollbackする
 		txMap := iFace.(map[int]*gorp.Transaction)
 		for k, v := range txMap {
-			log.Debug(k, " rollback!!")
+			log.Debug(k, " rollback!! ", mode)
 			err = v.Rollback()
 			// 正常な場合、削除する
 			if err == nil {
@@ -436,7 +458,8 @@ func shardRollback(c *gin.Context) error {
 
 		// エラーが起きてなければ削除
 		if !hasError {
-			c.Set(ckey.TxShardWMap, nil)
+			c.Set(txKey, nil)
+			c.Set(isKey, false)
 		}
 	}
 	return err
@@ -663,5 +686,11 @@ func GetDBShardMap(c *gin.Context, mode string) (map[int]*gorp.DbMap, error) {
 	default:
 		err = errors.New("invalid mode!!")
 	}
+
+	// 存在確認
+	if shardMap == nil {
+		err = errors.New("shardMap is nil!!")
+	}
+
 	return shardMap, err
 }

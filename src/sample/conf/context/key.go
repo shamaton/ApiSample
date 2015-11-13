@@ -23,8 +23,8 @@ const (
 	DbShardRMaps = "dbShardRMaps"
 	TxMasterW    = "txMasterW"
 	TxShardWMap  = "txShardWMap"
-	TxMasterR    = "txMasterW"
-	TxShardRMap  = "txShardWMap"
+	TxMasterR    = "txMasterR"
+	TxShardRMap  = "txShardRMap"
 
 	IsMasterWTxStart = "isMasterWTxStart"
 	IsShardWTxStart  = "isShardWTxStart"
