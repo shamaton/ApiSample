@@ -29,6 +29,8 @@ type Base interface {
 	CreateMulti(*gin.Context, interface{}) error
 
 	Delete(*gin.Context, interface{}) error
+
+	Count(*gin.Context, map[string]interface{}, ...interface{}) (int64, error)
 }
 
 type base struct {
@@ -524,8 +526,81 @@ func (b *base) Delete(c *gin.Context, holder interface{}) error {
 /**
  *  Save method
  */
-func Save() {
+/**************************************************************************************************/
+/*!
+ *  DBにレコードが存在していればUPDATEし、なければCREATEする
+ *
+ *  Saveは多用せず、なるべくCREATE/UPDATEを明示して利用すること
+ *  ex. Save(c, &{struct})
+ *
+ *  \param   c      : コンテキスト
+ *  \param   holder : テーブルデータ構造体
+ *  \return  失敗時エラー
+ */
+/**************************************************************************************************/
+func (b *base) Save(c *gin.Context, holder interface{}) error {
+	var err error
+	// MODE Wで存在を確認
+	option := Option{"mode": db.MODE_W}
 
+	b.Find(c, holder, option)
+	return err
+}
+
+/**
+ *  Count Method
+ */
+func (b *base) Count(c *gin.Context, condition map[string]interface{}, options ...interface{}) (int64, error) {
+	var count int64
+	var err error
+
+	wSql, wArgs, orders, err := b.conditionCheck(condition)
+	if err != nil {
+		log.Error("invalid condition set!!")
+		return count, err
+	}
+
+	mode, _, shardKey, shardId, err := b.optionCheck(options...)
+	if err != nil {
+		log.Error("invalid options set!!")
+		return count, err
+	}
+
+	// db_table_confから属性を把握
+	dbTableConfRepo := NewDbTableConfRepo()
+	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+
+	// shardIdをoptionで受け取ってないなら、shardKeyから取得する
+	if shardId == 0 {
+		shardId, err = b.getShardIdByShardKey(c, shardKey, dbTableConf)
+		if err != nil {
+			return count, err
+		}
+	}
+
+	// SQL生成
+	var sb builder.SelectBuilder
+
+	sb = builder.Select("COUNT(1)").From(b.table)
+	if len(wSql) > 0 && len(wArgs) > 0 {
+		sb = sb.Where(wSql, wArgs...)
+	}
+	if len(orders) > 0 {
+		sb = sb.OrderBy(orders...)
+	}
+
+	sql, args, err := sb.ToSql()
+	log.Debug(sql)
+
+	// select
+	tx, err := db.GetTransaction(c, mode, dbTableConf.IsUseTypeShard(), shardId)
+	if err != nil {
+		log.Error("transaction error!!")
+		return count, err
+	}
+	count, err = tx.SelectInt(sql, args...)
+
+	return count, err
 }
 
 /*

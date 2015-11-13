@@ -24,6 +24,8 @@ type UserRepo interface {
 
 	Delete(*gin.Context, interface{}) error
 
+	Count(*gin.Context, map[string]interface{}, ...interface{}) (int64, error)
+
 	// test
 	FindsTest(*gin.Context)
 }

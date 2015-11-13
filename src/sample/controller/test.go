@@ -97,6 +97,15 @@ func Test(c *gin.Context) {
 		return
 	}
 
+	// COUNT TEST
+	condition := model.Condition{"where": model.WhereCondition{{"id", "IN", model.In{1, 2, 3}}}}
+	option = model.Option{"shard_key": 1}
+	count, err := userRepo.Count(c, condition, option)
+	if checkErr(c, err, " count error") {
+		return
+	}
+	log.Debug("count : ", count)
+
 	time.Sleep(0 * time.Second)
 
 	db.Commit(c)
