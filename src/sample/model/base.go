@@ -27,6 +27,8 @@ type Base interface {
 	Update(*gin.Context, interface{}, ...interface{}) error
 	Create(*gin.Context, interface{}) error
 	CreateMulti(*gin.Context, interface{}) error
+
+	Delete(*gin.Context, interface{}) error
 }
 
 type base struct {
@@ -463,8 +465,43 @@ func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
 /**
  *  Delete method
  */
-func Delete() {
+func (b *base) Delete(c *gin.Context, holder interface{}) error {
 
+	var err error
+
+	// db_table_confから属性を把握
+	dbTableConfRepo := NewDbTableConfRepo()
+	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+
+	// holderから各要素を取得
+	_, _, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	if err != nil {
+		log.Error("read error in struct data")
+		return err
+	}
+
+	// shardの場合、shard_idを取得
+	shardId, err := b.getShardIdByShardKey(c, shardKey, dbTableConf)
+	if err != nil {
+		return err
+	}
+
+	// SQL生成
+	sql, args, err := builder.Delete(b.table).Where(pkMap).ToSql()
+	if err != nil {
+		log.Error("sql maker error!!")
+		return err
+	}
+	// tx
+	tx, err := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	if err != nil {
+		log.Error("transaction error!!")
+		return err
+	}
+	// DELETE
+	log.Critical(sql, args)
+	_, err = tx.Exec(sql, args...)
+	return err
 }
 
 /**

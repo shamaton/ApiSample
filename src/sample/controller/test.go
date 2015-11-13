@@ -76,6 +76,12 @@ func Test(c *gin.Context) {
 		return
 	}
 
+	// DELETE TEST
+	err = userRepo.Delete(c, user)
+	if checkErr(c, err, "user for delete error") {
+		return
+	}
+
 	// CREATE TEST
 	err = userRepo.Create(c, &prevUser)
 	if checkErr(c, err, "user insert error") {

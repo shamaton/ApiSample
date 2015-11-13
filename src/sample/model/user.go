@@ -22,6 +22,8 @@ type UserRepo interface {
 	Create(*gin.Context, interface{}) error
 	CreateMulti(*gin.Context, interface{}) error
 
+	Delete(*gin.Context, interface{}) error
+
 	// test
 	FindsTest(*gin.Context)
 }
