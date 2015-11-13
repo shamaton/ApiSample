@@ -62,7 +62,8 @@ func Test(c *gin.Context) {
 	userRepo.FindsTest(c)
 
 	// UPDATE TEST
-	user, err = userRepo.FindByID(c, 3, db.FOR_UPDATE)
+	option = model.Option{"for_update": 1}
+	user, err = userRepo.FindByID(c, 3, option)
 	if checkErr(c, err, "user for update error") {
 		return
 	}

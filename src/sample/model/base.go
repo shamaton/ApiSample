@@ -1002,17 +1002,6 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 	for _, v := range options {
 
 		switch v.(type) {
-		case string:
-			str := v.(string)
-			if str == db.MODE_W || str == db.MODE_R || str == db.MODE_BAK {
-				mode = str
-			} else if str == db.FOR_UPDATE {
-				isForUpdate = true
-			} else {
-				err = errors.New("unknown option!!")
-				break
-			}
-
 		case Option:
 			// 後で処理する
 			optionMap = v.(Option)
@@ -1020,7 +1009,7 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 		default:
 			err = errors.New("can not check this type!!")
 			log.Error(v)
-			break
+			return mode, isForUpdate, shardKey, shardId, err
 		}
 	}
 
@@ -1049,11 +1038,11 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 			// 型チェック & 範囲チェック
 			if !isInt {
 				err = errors.New("type not integer!!")
-				break
+				return mode, isForUpdate, shardKey, shardId, err
 			} else if value < 1 || value > 2 {
 				// TODO:ちゃんとチェックする
 				err = errors.New("over shard id range!!")
-				break
+				return mode, isForUpdate, shardKey, shardId, err
 			}
 			shardId = v.(int)
 
