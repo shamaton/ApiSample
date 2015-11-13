@@ -471,6 +471,17 @@ func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
 /**
  *  Delete method
  */
+/**************************************************************************************************/
+/*!
+ *  PRIMARY KEYを利用したDELETEを行う
+ *
+ *  ex. Delete(c, &{struct})
+ *
+ *  \param   c      : コンテキスト
+ *  \param   holder : テーブルデータ構造体
+ *  \return  失敗時エラー
+ */
+/**************************************************************************************************/
 func (b *base) Delete(c *gin.Context, holder interface{}) error {
 
 	var err error
