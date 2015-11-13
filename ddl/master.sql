@@ -4,7 +4,7 @@
 DROP TABLE IF EXISTS `user_shard`;
 CREATE TABLE `user_shard` (
   id bigint(20) unsigned NOT NULL,
-  shard_id int(11) unsigned NOT NULL,
+  shard_id tinyint(3) unsigned NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='user sharding table';
 
@@ -13,8 +13,8 @@ DROP TABLE IF EXISTS `db_table_conf`;
 CREATE TABLE `db_table_conf` (
   id bigint(20) unsigned NOT NULL,
   table_name varchar(255) NOT NULL,
-  use_type int(11) unsigned NOT NULL COMMENT '1:master 2:shard',
-  shard_type int(11) unsigned NOT NULL COMMENT '0:none 1:user 2:group(TBD...)',
+  use_type tinyint(3) unsigned NOT NULL COMMENT '1:master 2:shard',
+  shard_type tinyint(3) unsigned NOT NULL COMMENT '0:none 1:user 2:group(TBD...)',
   PRIMARY KEY (`id`),
   UNIQUE KEY (`table_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='table conf master';
