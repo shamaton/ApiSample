@@ -168,17 +168,12 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 	}
 
 	// shardIdをoptionで受け取ってないなら、shardKeyから取得する
-	if dbTableConf.IsUseTypeShard() && shardId == 0 {
-		// value check
-		if shardKey == nil {
-			return errors.New("not set shard_key!!")
-		}
-		// 検索
-		repo := NewShardRepo()
-		shardId, err = repo.findShardId(c, dbTableConf.ShardType, shardKey)
+	if shardId == 0 {
+		shardId, err = b.getShardIdByShardKey(c, shardKey, dbTableConf)
 		if err != nil {
 			return err
 		}
+
 	}
 
 	// SQL生成
