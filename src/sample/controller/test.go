@@ -106,6 +106,12 @@ func Test(c *gin.Context) {
 	}
 	log.Debug("count : ", count)
 
+	// SAVE TEST
+	err = userRepo.Save(c, user)
+	if checkErr(c, err, " save error") {
+		return
+	}
+
 	time.Sleep(0 * time.Second)
 
 	db.Commit(c)

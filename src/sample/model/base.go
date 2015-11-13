@@ -31,6 +31,7 @@ type Base interface {
 	Delete(*gin.Context, interface{}) error
 
 	Count(*gin.Context, map[string]interface{}, ...interface{}) (int64, error)
+	Save(*gin.Context, interface{}) error
 }
 
 type base struct {
@@ -538,12 +539,62 @@ func (b *base) Delete(c *gin.Context, holder interface{}) error {
  *  \return  失敗時エラー
  */
 /**************************************************************************************************/
+// TODO : createと共通化
 func (b *base) Save(c *gin.Context, holder interface{}) error {
 	var err error
-	// MODE Wで存在を確認
-	option := Option{"mode": db.MODE_W}
 
-	b.Find(c, holder, option)
+	// db_table_confから属性を把握
+	dbTableConfRepo := NewDbTableConfRepo()
+	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+
+	// holderから各要素を取得
+	columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	if err != nil {
+		log.Error("read error in struct data")
+		return err
+	}
+
+	// shardの場合、shard_idを取得
+	shardId, err := b.getShardIdByShardKey(c, shardKey, dbTableConf)
+	if err != nil {
+		return err
+	}
+
+	// TODO:pkのチェックするか検討
+
+	// values収集
+	var values []interface{}
+	for _, column := range columns {
+		if v, ok := pkMap[column]; ok {
+			values = append(values, v)
+		} else if v, ok := valueMap[column]; ok {
+			values = append(values, v)
+		} else {
+			return errors.New("unknown column found!!")
+		}
+	}
+
+	pkSql, pkArgs, err := pkMap.ToSql()
+	if err != nil {
+		return err
+	}
+	suffix := strings.Join([]string{"ON DUPLICATE KEY UPDATE", pkSql}, " ")
+
+	// SQL生成
+	sql, args, err := builder.Insert(b.table).Values(values...).Suffix(suffix, pkArgs...).ToSql()
+	if err != nil {
+		log.Error("sql maker error!!")
+		return err
+	}
+	// tx
+	tx, err := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	if err != nil {
+		log.Error("transaction error!!")
+		return err
+	}
+	// UPDATE(tx.Insertは要マッピングなので使わない)
+	log.Critical(sql, args)
+	_, err = tx.Exec(sql, args...)
 	return err
 }
 
