@@ -1,19 +1,21 @@
 package DBI
 
 import (
-	"fmt"
-	_ "github.com/go-sql-driver/mysql"
-	"golang.org/x/net/context"
-	"math/rand"
-	"sample/conf/gameConf"
-	"strconv"
-
 	"database/sql"
 	"errors"
+	"fmt"
+	"math/rand"
+	"strconv"
+
 	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
+	_ "github.com/go-sql-driver/mysql"
+
+	"golang.org/x/net/context"
 	"gopkg.in/gorp.v1"
+
 	ckey "sample/conf/context"
+	"sample/conf/gameConf"
 )
 
 var (
