@@ -45,6 +45,8 @@ type base struct {
 /*!
  *  pkを利用したfetchを行う
  *
+ *  ex. Find(c, &struct, Option{...} )
+ *
  *  \param   c       : コンテキスト
  *  \param   holder  : テーブルデータ構造体
  *  \param   options : モード[W,R,BAK] ロック[FOR_UPDATE]
@@ -104,6 +106,8 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 /**************************************************************************************************/
 /*!
  *  指定テーブルへのselectを行う
+ *
+ *  ex. Finds(c, &[]struct, Condition{"where":WhereCondition, "order":OrderCondition{}}, Option{...} )
  *
  *  \param   c         : コンテキスト
  *  \param   holders   : select結果格納先
@@ -214,6 +218,8 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
  *  prevHolder(更新前データ)が存在する場合、比較して値を更新するべきものだけSETする
  *  そうでない場合、PK以外の値全てをSETするので注意
  *
+ *  ex. Update(c, &struct, (&struct) )
+ *
  *  \param   condition : where, orderに利用する条件
  *  \return  where文, where引数、orderBy用配列、エラー
  */
@@ -306,6 +312,8 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
 /**************************************************************************************************/
 /*!
  *  INSERT(IGNORE)を実行する
+ *
+ *  ex. Insert(c, &struct)
  *
  *  \param   c      : コンテキスト
  *  \param   holder : テーブルデータ構造体(実体)
@@ -601,6 +609,18 @@ func (b *base) Save(c *gin.Context, holder interface{}) error {
 /**
  *  Count Method
  */
+/**************************************************************************************************/
+/*!
+ *  指定条件でレコードをCOUNTする
+ *
+ *  ex. Count(c, Condition{"where":WhereCondition, "order":OrderCondition{}}, Option{...} )
+ *
+ *  \param   c         : コンテキスト
+ *  \param   condition : where, orderに利用する条件
+ *  \param   options   : Option Map
+ *  \return  失敗時エラー
+ */
+/**************************************************************************************************/
 func (b *base) Count(c *gin.Context, condition map[string]interface{}, options ...interface{}) (int64, error) {
 	var count int64
 	var err error
