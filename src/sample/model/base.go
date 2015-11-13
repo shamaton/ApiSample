@@ -26,6 +26,12 @@ type Base interface {
 
 	Update(*gin.Context, interface{}, ...interface{}) error
 	Create(*gin.Context, interface{}) error
+	CreateMulti(*gin.Context, interface{}) error
+
+	Delete(*gin.Context, interface{}) error
+
+	Count(*gin.Context, map[string]interface{}, ...interface{}) (int64, error)
+	Save(*gin.Context, interface{}) error
 }
 
 type base struct {
@@ -38,6 +44,8 @@ type base struct {
 /**************************************************************************************************/
 /*!
  *  pkを利用したfetchを行う
+ *
+ *  ex. Find(c, &struct, Option{...} )
  *
  *  \param   c       : コンテキスト
  *  \param   holder  : テーブルデータ構造体
@@ -80,23 +88,13 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 	}
 	sql, args, err := sb.ToSql()
 
-	// とりあえず分けてみる
-	if isForUpdate {
-		tx, err := db.GetTransaction(c, dbTableConf.IsUseTypeShard(), shardId)
-		if err != nil {
-			log.Error("transaction error!!")
-			return err
-		}
-		err = tx.SelectOne(holder, sql, args...)
-	} else {
-		dbMap, err := db.GetDBConnection(c, mode, dbTableConf.IsUseTypeShard(), shardId)
-		if err != nil {
-			log.Error("db connection error!!")
-			return err
-		}
-		// fetch
-		err = dbMap.SelectOne(holder, sql, args...)
+	// fetch
+	tx, err := db.GetTransaction(c, mode, dbTableConf.IsUseTypeShard(), shardId)
+	if err != nil {
+		log.Error("transaction error!!")
+		return err
 	}
+	err = tx.SelectOne(holder, sql, args...)
 
 	// TODO:デバッグでは通常selectで複数行取得されないことも確認する
 	return err
@@ -108,6 +106,8 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 /**************************************************************************************************/
 /*!
  *  指定テーブルへのselectを行う
+ *
+ *  ex. Finds(c, &[]struct, Condition{"where":WhereCondition, "order":OrderCondition{}}, Option{...} )
  *
  *  \param   c         : コンテキスト
  *  \param   holders   : select結果格納先
@@ -124,7 +124,7 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 		return err
 	}
 
-	mode, isForUpdate, shardKey, shardId, err := b.optionCheck(options...)
+	mode, _, shardKey, shardId, err := b.optionCheck(options...) // isForUpdateは封印
 	if err != nil {
 		log.Error("invalid options set!!")
 		return err
@@ -168,17 +168,12 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 	}
 
 	// shardIdをoptionで受け取ってないなら、shardKeyから取得する
-	if dbTableConf.IsUseTypeShard() && shardId == 0 {
-		// value check
-		if shardKey == nil {
-			return errors.New("not set shard_key!!")
-		}
-		// 検索
-		repo := NewShardRepo()
-		shardId, err = repo.findShardId(c, dbTableConf.ShardType, shardKey)
+	if shardId == 0 {
+		shardId, err = b.getShardIdByShardKey(c, shardKey, dbTableConf)
 		if err != nil {
 			return err
 		}
+
 	}
 
 	// SQL生成
@@ -202,25 +197,13 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
 	sql, args, err := sb.ToSql()
 	log.Debug(sql)
 
-	// とりあえず分けてみる
-	// TODO:ここのforupdateどうするか
-	if isForUpdate {
-		tx, err := db.GetTransaction(c, dbTableConf.IsUseTypeShard(), shardId)
-		if err != nil {
-			log.Error("transaction error!!")
-			return err
-		}
-		// select
-		_, err = tx.Select(holders, sql, args...)
-	} else {
-		dbMap, err := db.GetDBConnection(c, mode, dbTableConf.IsUseTypeShard(), shardId)
-		if err != nil {
-			log.Error("db connection error!!")
-			return err
-		}
-		// select
-		_, err = dbMap.Select(holders, sql, args...)
+	// select
+	tx, err := db.GetTransaction(c, mode, dbTableConf.IsUseTypeShard(), shardId)
+	if err != nil {
+		log.Error("transaction error!!")
+		return err
 	}
+	_, err = tx.Select(holders, sql, args...)
 
 	return err
 }
@@ -234,6 +217,8 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
  *
  *  prevHolder(更新前データ)が存在する場合、比較して値を更新するべきものだけSETする
  *  そうでない場合、PK以外の値全てをSETするので注意
+ *
+ *  ex. Update(c, &struct, (&struct) )
  *
  *  \param   condition : where, orderに利用する条件
  *  \return  where文, where引数、orderBy用配列、エラー
@@ -310,7 +295,7 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
 		return err
 	}
 	// tx
-	tx, err := db.GetTransaction(c, dbTableConf.IsUseTypeShard(), shardId)
+	tx, err := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
 	if err != nil {
 		log.Error("transaction error!!")
 		return err
@@ -324,6 +309,17 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
 /**
  *  Create method
  */
+/**************************************************************************************************/
+/*!
+ *  INSERT(IGNORE)を実行する
+ *
+ *  ex. Insert(c, &struct)
+ *
+ *  \param   c      : コンテキスト
+ *  \param   holder : テーブルデータ構造体(実体)
+ *  \return  処理失敗時エラー
+ */
+/**************************************************************************************************/
 func (b *base) Create(c *gin.Context, holder interface{}) error {
 
 	var err error
@@ -333,7 +329,7 @@ func (b *base) Create(c *gin.Context, holder interface{}) error {
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
 
 	// holderから各要素を取得
-	_, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
 	if err != nil {
 		log.Error("read error in struct data")
 		return err
@@ -349,11 +345,14 @@ func (b *base) Create(c *gin.Context, holder interface{}) error {
 
 	// values収集
 	var values []interface{}
-	for _, v := range pkMap {
-		values = append(values, v)
-	}
-	for _, v := range valueMap {
-		values = append(values, v)
+	for _, column := range columns {
+		if v, ok := pkMap[column]; ok {
+			values = append(values, v)
+		} else if v, ok := valueMap[column]; ok {
+			values = append(values, v)
+		} else {
+			return errors.New("unknown column found!!")
+		}
 	}
 
 	// SQL生成
@@ -364,7 +363,7 @@ func (b *base) Create(c *gin.Context, holder interface{}) error {
 		return err
 	}
 	// tx
-	tx, err := db.GetTransaction(c, dbTableConf.IsUseTypeShard(), shardId)
+	tx, err := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
 	if err != nil {
 		log.Error("transaction error!!")
 		return err
@@ -375,37 +374,305 @@ func (b *base) Create(c *gin.Context, holder interface{}) error {
 	return err
 }
 
-func CreateMulti() {
+/**
+ * Create Multi method
+ */
+/**************************************************************************************************/
+/*!
+ *  データ構造体配列からINSERT MULTIを実行する
+ *
+ *  &(array)[ &{struct}, &{struct}, ...] のようなデータを想定している
+ *
+ *  \param   c      : コンテキスト
+ *  \param   holder : テーブルデータ構造体配列
+ *  \return  カラム、pk以外の値、pkのマップ、shard検索キー、エラー
+ */
+/**************************************************************************************************/
+func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
+	var err error
 
+	// 参照渡しかチェック
+	hRef := reflect.ValueOf(holders)
+	if hRef.Kind() != reflect.Ptr {
+		return errors.New("holders type is not Ptr!!")
+	}
+
+	// スライスかチェック
+	sRef := hRef.Elem()
+	if sRef.Kind() != reflect.Slice {
+		return errors.New("holders Ptr type is not slice!!")
+	}
+
+	length := sRef.Len()
+	// 空チェック
+	if length < 1 {
+		return errors.New("holder slice invalid length!!")
+	}
+
+	// db_table_confから属性を把握
+	dbTableConfRepo := NewDbTableConfRepo()
+	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+
+	// テーブルの情報を取得
+	var shardIdMap = map[int]int{} // for check
+	var shardId int
+	var allValues [][]interface{}
+	for i := 0; i < length; i++ {
+		holder := sRef.Index(i).Interface()
+
+		columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+		if err != nil {
+			log.Error("read error in struct data")
+			return err
+		}
+
+		// values収集
+		var values []interface{}
+		for _, column := range columns {
+			if v, ok := pkMap[column]; ok {
+				values = append(values, v)
+			} else if v, ok := valueMap[column]; ok {
+				values = append(values, v)
+			} else {
+				return errors.New("unknown column found!!")
+			}
+		}
+		allValues = append(allValues, values)
+
+		// shardの場合、shard_idを取得
+		shardId, err = b.getShardIdByShardKey(c, shardKey, dbTableConf)
+		shardIdMap[shardId] = shardId
+		if err != nil {
+			return err
+		}
+	}
+
+	// 取得されたshardIDはユニークであること
+	if len(shardIdMap) != 1 {
+		err = errors.New("can not set multi shard id !!")
+		return err
+	}
+
+	// SQL生成
+	var ib builder.InsertBuilder
+	ib = builder.Insert(b.table).Options("IGNORE")
+
+	// Valuesで接続する
+	for _, values := range allValues {
+		ib = ib.Values(values...)
+	}
+
+	sql, args, err := ib.ToSql()
+	if err != nil {
+		log.Error("sql maker error!!")
+		return err
+	}
+	// tx
+	tx, err := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	if err != nil {
+		log.Error("transaction error!!")
+		return err
+	}
+	log.Critical(sql, args)
+	_, err = tx.Exec(sql, args...)
+
+	return err
 }
 
 /**
  *  Delete method
  */
-func Delete() {
+/**************************************************************************************************/
+/*!
+ *  PRIMARY KEYを利用したDELETEを行う
+ *
+ *  ex. Delete(c, &{struct})
+ *
+ *  \param   c      : コンテキスト
+ *  \param   holder : テーブルデータ構造体
+ *  \return  失敗時エラー
+ */
+/**************************************************************************************************/
+func (b *base) Delete(c *gin.Context, holder interface{}) error {
 
+	var err error
+
+	// db_table_confから属性を把握
+	dbTableConfRepo := NewDbTableConfRepo()
+	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+
+	// holderから各要素を取得
+	_, _, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	if err != nil {
+		log.Error("read error in struct data")
+		return err
+	}
+
+	// shardの場合、shard_idを取得
+	shardId, err := b.getShardIdByShardKey(c, shardKey, dbTableConf)
+	if err != nil {
+		return err
+	}
+
+	// SQL生成
+	sql, args, err := builder.Delete(b.table).Where(pkMap).ToSql()
+	if err != nil {
+		log.Error("sql maker error!!")
+		return err
+	}
+	// tx
+	tx, err := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	if err != nil {
+		log.Error("transaction error!!")
+		return err
+	}
+	// DELETE
+	log.Critical(sql, args)
+	_, err = tx.Exec(sql, args...)
+	return err
 }
 
 /**
  *  Save method
  */
-func Save() {
+/**************************************************************************************************/
+/*!
+ *  DBにレコードが存在していればUPDATEし、なければCREATEする
+ *
+ *  Saveは多用せず、なるべくCREATE/UPDATEを明示して利用すること
+ *  ex. Save(c, &{struct})
+ *
+ *  \param   c      : コンテキスト
+ *  \param   holder : テーブルデータ構造体
+ *  \return  失敗時エラー
+ */
+/**************************************************************************************************/
+// TODO : createと共通化
+func (b *base) Save(c *gin.Context, holder interface{}) error {
+	var err error
 
-}
+	// db_table_confから属性を把握
+	dbTableConfRepo := NewDbTableConfRepo()
+	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
 
-/*
-func (b *base) FindBySelectBuilder(c *gin.Context, holder interface{}, sb builder.SelectBuilder, isForUpdate bool) error {
-	sql, args, _ := sb.ToSql()
-	dbMap, err := DBI.GetDBConnection(c, "table_name")
+	// holderから各要素を取得
+	columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
 	if err != nil {
-		log.Error("db error!!")
+		log.Error("read error in struct data")
 		return err
 	}
 
-	err = dbMap.SelectOne(holder, sql, args...)
+	// shardの場合、shard_idを取得
+	shardId, err := b.getShardIdByShardKey(c, shardKey, dbTableConf)
+	if err != nil {
+		return err
+	}
+
+	// TODO:pkのチェックするか検討
+
+	// values収集
+	var values []interface{}
+	for _, column := range columns {
+		if v, ok := pkMap[column]; ok {
+			values = append(values, v)
+		} else if v, ok := valueMap[column]; ok {
+			values = append(values, v)
+		} else {
+			return errors.New("unknown column found!!")
+		}
+	}
+
+	pkSql, pkArgs, err := pkMap.ToSql()
+	if err != nil {
+		return err
+	}
+	suffix := strings.Join([]string{"ON DUPLICATE KEY UPDATE", pkSql}, " ")
+
+	// SQL生成
+	sql, args, err := builder.Insert(b.table).Values(values...).Suffix(suffix, pkArgs...).ToSql()
+	if err != nil {
+		log.Error("sql maker error!!")
+		return err
+	}
+	// tx
+	tx, err := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	if err != nil {
+		log.Error("transaction error!!")
+		return err
+	}
+	// UPDATE(tx.Insertは要マッピングなので使わない)
+	log.Critical(sql, args)
+	_, err = tx.Exec(sql, args...)
 	return err
 }
-*/
+
+/**
+ *  Count Method
+ */
+/**************************************************************************************************/
+/*!
+ *  指定条件でレコードをCOUNTする
+ *
+ *  ex. Count(c, Condition{"where":WhereCondition, "order":OrderCondition{}}, Option{...} )
+ *
+ *  \param   c         : コンテキスト
+ *  \param   condition : where, orderに利用する条件
+ *  \param   options   : Option Map
+ *  \return  失敗時エラー
+ */
+/**************************************************************************************************/
+func (b *base) Count(c *gin.Context, condition map[string]interface{}, options ...interface{}) (int64, error) {
+	var count int64
+	var err error
+
+	wSql, wArgs, orders, err := b.conditionCheck(condition)
+	if err != nil {
+		log.Error("invalid condition set!!")
+		return count, err
+	}
+
+	mode, _, shardKey, shardId, err := b.optionCheck(options...)
+	if err != nil {
+		log.Error("invalid options set!!")
+		return count, err
+	}
+
+	// db_table_confから属性を把握
+	dbTableConfRepo := NewDbTableConfRepo()
+	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+
+	// shardIdをoptionで受け取ってないなら、shardKeyから取得する
+	if shardId == 0 {
+		shardId, err = b.getShardIdByShardKey(c, shardKey, dbTableConf)
+		if err != nil {
+			return count, err
+		}
+	}
+
+	// SQL生成
+	var sb builder.SelectBuilder
+
+	sb = builder.Select("COUNT(1)").From(b.table)
+	if len(wSql) > 0 && len(wArgs) > 0 {
+		sb = sb.Where(wSql, wArgs...)
+	}
+	if len(orders) > 0 {
+		sb = sb.OrderBy(orders...)
+	}
+
+	sql, args, err := sb.ToSql()
+	log.Debug(sql)
+
+	// select
+	tx, err := db.GetTransaction(c, mode, dbTableConf.IsUseTypeShard(), shardId)
+	if err != nil {
+		log.Error("transaction error!!")
+		return count, err
+	}
+	count, err = tx.SelectInt(sql, args...)
+
+	return count, err
+}
 
 /**************************************************************************************************/
 /*!
@@ -730,22 +997,11 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 	var shardKey interface{}
 	var shardId int
 
-	var optionMap map[string]interface{}
+	var optionMap Option
 
 	for _, v := range options {
 
 		switch v.(type) {
-		case string:
-			str := v.(string)
-			if str == db.MODE_W || str == db.MODE_R || str == db.MODE_BAK {
-				mode = str
-			} else if str == db.FOR_UPDATE {
-				isForUpdate = true
-			} else {
-				err = errors.New("unknown option!!")
-				break
-			}
-
 		case Option:
 			// 後で処理する
 			optionMap = v.(Option)
@@ -753,7 +1009,7 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 		default:
 			err = errors.New("can not check this type!!")
 			log.Error(v)
-			break
+			return mode, isForUpdate, shardKey, shardId, err
 		}
 	}
 
@@ -782,11 +1038,11 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 			// 型チェック & 範囲チェック
 			if !isInt {
 				err = errors.New("type not integer!!")
-				break
+				return mode, isForUpdate, shardKey, shardId, err
 			} else if value < 1 || value > 2 {
 				// TODO:ちゃんとチェックする
 				err = errors.New("over shard id range!!")
-				break
+				return mode, isForUpdate, shardKey, shardId, err
 			}
 			shardId = v.(int)
 

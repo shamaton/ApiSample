@@ -7,6 +7,8 @@ import ()
  */
 type ContextKey string
 
+// TODO:リクエストコンテキストとグローバルコンテキストで分ける
+
 const (
 	// context
 	GContext ContextKey = "gContext"
@@ -19,11 +21,15 @@ const (
 	DbShardWMap  = "dbShardWMap"
 	DbMasterRs   = "dbMasterRs"
 	DbShardRMaps = "dbShardRMaps"
-	TxMaster     = "txMaster"
-	TxShardMap   = "txShardMap"
+	TxMasterW    = "txMasterW"
+	TxShardWMap  = "txShardWMap"
+	TxMasterR    = "txMasterR"
+	TxShardRMap  = "txShardRMap"
 
-	IsMasterTxStart = "isMasterTxStart"
-	IsShardTxStart  = "isShardTxStart"
+	IsMasterWTxStart = "isMasterWTxStart"
+	IsShardWTxStart  = "isShardWTxStart"
+	IsMasterRTxStart = "isMasterRTxStart"
+	IsShardRTxStart  = "isShardRTxStart"
 
 	SlaveIndex = "slaveIndex"
 )

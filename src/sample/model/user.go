@@ -6,9 +6,9 @@ import (
 )
 
 type User struct {
-	Id        int `pk:"true" shard:"true"`
+	Id        uint64 `pk:"true" shard:"true"`
 	Name      string
-	Score     int
+	Score     uint
 	CreatedAt uint `db:"created_at"`
 	UpdatedAt uint `db:"updated_at"`
 }
@@ -16,10 +16,16 @@ type User struct {
 // user
 /////////////////////////////
 type UserRepo interface {
-	FindByID(*gin.Context, int, ...interface{}) (*User, error)
+	FindByID(*gin.Context, uint64, ...interface{}) (*User, error)
 
 	Update(*gin.Context, interface{}, ...interface{}) error
 	Create(*gin.Context, interface{}) error
+	CreateMulti(*gin.Context, interface{}) error
+
+	Delete(*gin.Context, interface{}) error
+
+	Count(*gin.Context, map[string]interface{}, ...interface{}) (int64, error)
+	Save(*gin.Context, interface{}) error
 
 	// test
 	FindsTest(*gin.Context)
@@ -34,7 +40,7 @@ type UserRepoImpl struct {
 	*base
 }
 
-func (r UserRepoImpl) FindByID(c *gin.Context, id int, options ...interface{}) (*User, error) {
+func (r UserRepoImpl) FindByID(c *gin.Context, id uint64, options ...interface{}) (*User, error) {
 	var user = new(User)
 	user.Id = id
 	err := r.Find(c, user, options...)

@@ -3,7 +3,7 @@
 
 DROP TABLE IF EXISTS user;
 CREATE TABLE `user` (
-  id int(11) unsigned NOT NULL,
+  id bigint(20) unsigned NOT NULL,
   name varchar(255),
   score int(11) unsigned NOT NULL,
   created_at int(11) unsigned NOT NULL,
