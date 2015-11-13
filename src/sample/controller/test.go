@@ -82,6 +82,15 @@ func Test(c *gin.Context) {
 		return
 	}
 
+	// CREATE MULTI TEST
+	var users []*model.User
+	users = append(users, user)
+	users = append(users, &prevUser)
+	err = userRepo.CreateMulti(c, &users)
+	if checkErr(c, err, "user insert multi error") {
+		return
+	}
+
 	time.Sleep(0 * time.Second)
 
 	db.Commit(c)

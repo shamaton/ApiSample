@@ -26,6 +26,7 @@ type Base interface {
 
 	Update(*gin.Context, interface{}, ...interface{}) error
 	Create(*gin.Context, interface{}) error
+	CreateMulti(*gin.Context, interface{}) error
 }
 
 type base struct {
@@ -297,6 +298,15 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
 /**
  *  Create method
  */
+/**************************************************************************************************/
+/*!
+ *  INSERT(IGNORE)を実行する
+ *
+ *  \param   c      : コンテキスト
+ *  \param   holder : テーブルデータ構造体(実体)
+ *  \return  処理失敗時エラー
+ */
+/**************************************************************************************************/
 func (b *base) Create(c *gin.Context, holder interface{}) error {
 
 	var err error
@@ -348,8 +358,106 @@ func (b *base) Create(c *gin.Context, holder interface{}) error {
 	return err
 }
 
-func CreateMulti() {
+/**
+ * Create Multi method
+ */
+/**************************************************************************************************/
+/*!
+ *  データ構造体配列からINSERT MULTIを実行する
+ *
+ *  &(array)[ &{struct}, &{struct}, ...] のようなデータを想定している
+ *
+ *  \param   c      : コンテキスト
+ *  \param   holder : テーブルデータ構造体配列
+ *  \return  カラム、pk以外の値、pkのマップ、shard検索キー、エラー
+ */
+/**************************************************************************************************/
+func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
+	var err error
 
+	// 参照渡しかチェック
+	hRef := reflect.ValueOf(holders)
+	if hRef.Kind() != reflect.Ptr {
+		return errors.New("holders type is not Ptr!!")
+	}
+
+	// スライスかチェック
+	sRef := hRef.Elem()
+	if sRef.Kind() != reflect.Slice {
+		return errors.New("holders Ptr type is not slice!!")
+	}
+
+	length := sRef.Len()
+	// 空チェック
+	if length < 1 {
+		return errors.New("holder slice invalid length!!")
+	}
+
+	// db_table_confから属性を把握
+	dbTableConfRepo := NewDbTableConfRepo()
+	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+
+	// テーブルの情報を取得
+	var shardIdMap = map[int]int{} // for check
+	var shardId int
+	var allValues [][]interface{}
+	for i := 0; i < length; i++ {
+		holder := sRef.Index(i).Interface()
+
+		_, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+		if err != nil {
+			log.Error("read error in struct data")
+			return err
+		}
+
+		// values収集
+		var values []interface{}
+		for _, v := range pkMap {
+			values = append(values, v)
+		}
+		for _, v := range valueMap {
+			values = append(values, v)
+		}
+		allValues = append(allValues, values)
+
+		// shardの場合、shard_idを取得
+		shardId, err = b.getShardIdByShardKey(c, shardKey, dbTableConf)
+		shardIdMap[shardId] = shardId
+		if err != nil {
+			return err
+		}
+	}
+
+	// 取得されたshardIDはユニークであること
+	if len(shardIdMap) != 1 {
+		err = errors.New("can not set multi shard id !!")
+		return err
+	}
+
+	// SQL生成
+	var ib builder.InsertBuilder
+	ib = builder.Insert(b.table).Options("IGNORE")
+
+	// Valuesで接続する
+	for _, values := range allValues {
+		ib = ib.Values(values...)
+	}
+
+	sql, args, err := ib.ToSql()
+	if err != nil {
+		log.Error("sql maker error!!")
+		return err
+	}
+	// tx
+	tx, err := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	if err != nil {
+		log.Error("transaction error!!")
+		return err
+	}
+	log.Critical(sql, args)
+	_, err = tx.Exec(sql, args...)
+
+	return err
 }
 
 /**

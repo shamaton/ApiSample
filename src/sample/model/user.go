@@ -20,6 +20,7 @@ type UserRepo interface {
 
 	Update(*gin.Context, interface{}, ...interface{}) error
 	Create(*gin.Context, interface{}) error
+	CreateMulti(*gin.Context, interface{}) error
 
 	// test
 	FindsTest(*gin.Context)
