@@ -83,7 +83,7 @@ func Test(c *gin.Context) {
 	}
 
 	// CREATE TEST
-	err = userRepo.Create(c, &prevUser)
+	err = userRepo.Create(c, user)
 	if checkErr(c, err, "user insert error") {
 		return
 	}

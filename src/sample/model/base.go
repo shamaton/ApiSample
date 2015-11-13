@@ -318,7 +318,7 @@ func (b *base) Create(c *gin.Context, holder interface{}) error {
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
 
 	// holderから各要素を取得
-	_, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
 	if err != nil {
 		log.Error("read error in struct data")
 		return err
@@ -334,11 +334,14 @@ func (b *base) Create(c *gin.Context, holder interface{}) error {
 
 	// values収集
 	var values []interface{}
-	for _, v := range pkMap {
-		values = append(values, v)
-	}
-	for _, v := range valueMap {
-		values = append(values, v)
+	for _, column := range columns {
+		if v, ok := pkMap[column]; ok {
+			values = append(values, v)
+		} else if v, ok := valueMap[column]; ok {
+			values = append(values, v)
+		} else {
+			return errors.New("unknown column found!!")
+		}
 	}
 
 	// SQL生成
@@ -406,7 +409,7 @@ func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
 	for i := 0; i < length; i++ {
 		holder := sRef.Index(i).Interface()
 
-		_, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+		columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
 		if err != nil {
 			log.Error("read error in struct data")
 			return err
@@ -414,11 +417,14 @@ func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
 
 		// values収集
 		var values []interface{}
-		for _, v := range pkMap {
-			values = append(values, v)
-		}
-		for _, v := range valueMap {
-			values = append(values, v)
+		for _, column := range columns {
+			if v, ok := pkMap[column]; ok {
+				values = append(values, v)
+			} else if v, ok := valueMap[column]; ok {
+				values = append(values, v)
+			} else {
+				return errors.New("unknown column found!!")
+			}
 		}
 		allValues = append(allValues, values)
 
