@@ -2,13 +2,14 @@ package model
 
 import (
 	"errors"
-	builder "github.com/Masterminds/squirrel"
-	log "github.com/cihub/seelog"
-	"github.com/gin-gonic/gin"
 	"reflect"
 	db "sample/DBI"
 	"strconv"
 	"strings"
+
+	builder "github.com/Masterminds/squirrel"
+	log "github.com/cihub/seelog"
+	"github.com/gin-gonic/gin"
 )
 
 // 一旦ここに

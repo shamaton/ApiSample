@@ -1,6 +1,8 @@
 package model
 
 import (
+	"time"
+
 	"github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 )
@@ -9,8 +11,8 @@ type User struct {
 	Id        uint64 `pk:"true" shard:"true"`
 	Name      string
 	Score     uint
-	CreatedAt uint `db:"created_at"`
-	UpdatedAt uint `db:"updated_at"`
+	CreatedAt time.Time `db:"created_at"`
+	UpdatedAt time.Time `db:"updated_at"`
 }
 
 // user
