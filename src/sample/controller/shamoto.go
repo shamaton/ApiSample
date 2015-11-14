@@ -15,8 +15,9 @@ import (
 func Shamoto(c *gin.Context) {
 	defer DBI.RollBack(c)
 
+	option := model.Option{"for_update": 1}
 	userRepo := model.NewUserRepo()
-	user, _ := userRepo.FindByID(c, 3)
+	user, _ := userRepo.FindByID(c, 3, option)
 
 	// unixtimeに変換
 	log.Debug(time.Now())
@@ -24,6 +25,11 @@ func Shamoto(c *gin.Context) {
 	log.Debug(user.UpdatedAt.Location())
 
 	log.Info(user)
+
+	user.Score += 1000
+	userRepo.Update(c, user)
+
+	DBI.Commit(c)
 
 	c.String(http.StatusOK, "hi!!")
 }

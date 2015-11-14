@@ -19,6 +19,14 @@ type WhereCondition [][]interface{}
 type OrderByCondition [][]string
 type In []interface{}
 
+/**
+ * INSERT UPDATE系で除外するカラム
+ */
+const (
+	createdAt = "created_at"
+	updatedAt = "updated_at"
+)
+
 // base
 //////////////////////////////
 type Base interface {
@@ -68,7 +76,7 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
 
 	// holderから各要素を取得
-	columns, _, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	columns, _, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf, false)
 	if err != nil {
 		log.Error("read error in struct data")
 		return err
@@ -251,7 +259,7 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
 
 	// holderから各要素を取得
-	_, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	_, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf, true)
 	if err != nil {
 		log.Error("read error in struct data")
 		return err
@@ -330,7 +338,7 @@ func (b *base) Create(c *gin.Context, holder interface{}) error {
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
 
 	// holderから各要素を取得
-	columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf, true)
 	if err != nil {
 		log.Error("read error in struct data")
 		return err
@@ -421,7 +429,7 @@ func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
 	for i := 0; i < length; i++ {
 		holder := sRef.Index(i).Interface()
 
-		columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+		columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf, true)
 		if err != nil {
 			log.Error("read error in struct data")
 			return err
@@ -503,7 +511,7 @@ func (b *base) Delete(c *gin.Context, holder interface{}) error {
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
 
 	// holderから各要素を取得
-	_, _, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	_, _, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf, false)
 	if err != nil {
 		log.Error("read error in struct data")
 		return err
@@ -557,7 +565,7 @@ func (b *base) Save(c *gin.Context, holder interface{}) error {
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
 
 	// holderから各要素を取得
-	columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf, true)
 	if err != nil {
 		log.Error("read error in struct data")
 		return err
@@ -681,10 +689,11 @@ func (b *base) Count(c *gin.Context, condition map[string]interface{}, options .
  *
  *  \param   holder      : テーブルデータ構造体(実体)
  *  \param   dbTableConf : db_table_confマスタ情報
+ *  \param   isINSorUPD  : INSERT or UPDATE時にtrue
  *  \return  カラム、pk以外の値、pkのマップ、shard検索キー、エラー
  */
 /**************************************************************************************************/
-func (b *base) getTableInfoFromStructData(holder interface{}, dbTableConf *DbTableConf) ([]string, map[string]interface{}, builder.Eq, interface{}, error) {
+func (b *base) getTableInfoFromStructData(holder interface{}, dbTableConf *DbTableConf, isINSorUPD bool) ([]string, map[string]interface{}, builder.Eq, interface{}, error) {
 	var err error
 
 	var columns []string
@@ -710,6 +719,11 @@ func (b *base) getTableInfoFromStructData(holder interface{}, dbTableConf *DbTab
 			column = tag.Get("db")
 		} else {
 			column = strings.ToLower(field.Name)
+		}
+
+		// INSERT, UPDATEではupdated_atとcreated_atを除外する
+		if isINSorUPD && (column == createdAt || column == updatedAt) {
+			continue
 		}
 
 		columns = append(columns, column)
