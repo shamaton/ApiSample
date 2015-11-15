@@ -10,6 +10,7 @@ import (
 
 	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
+	"github.com/k0kubun/pp"
 )
 
 func Shamoto(c *gin.Context) {
@@ -28,6 +29,14 @@ func Shamoto(c *gin.Context) {
 
 	user.Score += 1000
 	userRepo.Update(c, user)
+
+	option = model.Option{"mode": DBI.MODE_W}
+	logRepo := model.NewUserTestLogRepo()
+	userLog := logRepo.FindByID(c, 1, option)
+	if userLog == nil {
+		log.Error("log not found!")
+	}
+	log.Info(pp.Println(userLog))
 
 	DBI.Commit(c)
 

@@ -9,7 +9,17 @@ CREATE TABLE `user` (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+DROP TABLE IF EXISTS user_test_log;
+CREATE TABLE `user_test_log` (
+  id bigint(20) unsigned NOT NULL,
+  user_id bigint(20) unsigned NOT NULL,
+  test_value int(11) unsigned NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY i1 (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 BEGIN;
 INSERT INTO game_shard_1.user(id, name, score) VALUES (1, "aaa", 100) ON DUPLICATE KEY UPDATE id = id;
