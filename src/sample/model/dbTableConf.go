@@ -9,6 +9,7 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 
+	"errors"
 	"sample/DBI"
 )
 
@@ -44,6 +45,9 @@ type DbTableConf struct {
 var table = "db_table_conf"
 var columns = "id, table_name, use_type, shard_type"
 
+// CACHE TEST
+var dbTableConfCache = map[string]DbTableConf{}
+
 /**
  * table data method
  */
@@ -53,8 +57,8 @@ var columns = "id, table_name, use_type, shard_type"
  *  \return  true or false
  */
 /**************************************************************************************************/
-func (data *DbTableConf) IsUseTypeMaster() bool {
-	if data.UseType == useTypeMaster {
+func (d *DbTableConf) IsUseTypeMaster() bool {
+	if d.UseType == useTypeMaster {
 		return true
 	}
 	return false
@@ -66,8 +70,8 @@ func (data *DbTableConf) IsUseTypeMaster() bool {
  *  \return  true or false
  */
 /**************************************************************************************************/
-func (data *DbTableConf) IsUseTypeShard() bool {
-	if data.UseType == useTypeShard {
+func (d *DbTableConf) IsUseTypeShard() bool {
+	if d.UseType == useTypeShard {
 		return true
 	}
 	return false
@@ -79,8 +83,8 @@ func (data *DbTableConf) IsUseTypeShard() bool {
  *  \return  true or false
  */
 /**************************************************************************************************/
-func (data *DbTableConf) IsShardTypeUser() bool {
-	if data.ShardType == shardTypeUser {
+func (d *DbTableConf) IsShardTypeUser() bool {
+	if d.ShardType == shardTypeUser {
 		return true
 	}
 	return false
@@ -109,28 +113,81 @@ type DbTableConfRepoImpl struct {
  *  \return  テーブルデータ、エラー
  */
 /**************************************************************************************************/
-func (r DbTableConfRepoImpl) Find(c *gin.Context, tableName string) (*DbTableConf, error) {
+func (impl DbTableConfRepoImpl) Find(c *gin.Context, tableName string) (*DbTableConf, error) {
 	var err error
-	var row = new(DbTableConf)
+
+	if len(dbTableConfCache) < 1 {
+		err = impl.makeCache(c)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	data, isValid := dbTableConfCache[tableName]
+	if !isValid {
+		err = errors.New("not found db_table_conf record!!")
+		return nil, err
+	}
+
+	return &data, err
+}
+
+/**************************************************************************************************/
+/*!
+ *  DbTableConfデータの全取得
+ *
+ *  \param   c : コンテキスト
+ *  \return  全データ、エラー
+ */
+/**************************************************************************************************/
+func (impl DbTableConfRepoImpl) finds(c *gin.Context) (*[]DbTableConf, error) {
+	var datas []DbTableConf
 
 	// ハンドル取得
 	conn, err := DBI.GetDBMasterConnection(c, DBI.MODE_R)
 	if err != nil {
 		log.Error("not found master connection!!")
-		return row, err
+		return nil, err
 	}
 
 	// user_shardを検索
-	sql, args, err := builder.Select(columns).From(table).Where("table_name = ?", tableName).ToSql()
+	sql, args, err := builder.Select(columns).From(table).ToSql()
 	if err != nil {
 		log.Error("query build error!!")
-		return row, err
+		return nil, err
 	}
 
-	err = conn.SelectOne(row, sql, args...)
+	_, err = conn.Select(&datas, sql, args...)
 	if err != nil {
 		log.Error("not found db table conf!!")
 	}
 
-	return row, err
+	return &datas, err
+}
+
+/**************************************************************************************************/
+/*!
+ *  キャッシュを生成する
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
+func (impl DbTableConfRepoImpl) makeCache(c *gin.Context) error {
+	allData, err := impl.finds(c)
+	if err != nil {
+		log.Error("db_table_conf err!!")
+		return err
+	}
+	if len(*allData) < 1 {
+		err = errors.New("db_table_conf is empty!!")
+		log.Error(err)
+		return err
+	}
+
+	// mapを生成する
+	for _, v := range *allData {
+		dbTableConfCache[v.TableName] = v
+	}
+	return err
 }
