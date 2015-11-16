@@ -28,7 +28,7 @@ const (
 const (
 	shardTypeNone int = iota
 	shardTypeUser
-	//shardTypeGroup
+	shardTypeGroup
 )
 
 /**
@@ -85,6 +85,19 @@ func (d *DbTableConf) IsUseTypeShard() bool {
 /**************************************************************************************************/
 func (d *DbTableConf) IsShardTypeUser() bool {
 	if d.ShardType == shardTypeUser {
+		return true
+	}
+	return false
+}
+
+/**************************************************************************************************/
+/*!
+ *  GROUP_IDでシャーディングされているか
+ *  \return  true or false
+ */
+/**************************************************************************************************/
+func (d *DbTableConf) IsShardTypeGroup() bool {
+	if d.ShardType == shardTypeGroup {
 		return true
 	}
 	return false
