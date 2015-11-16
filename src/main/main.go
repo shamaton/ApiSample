@@ -8,10 +8,11 @@ import (
 
 	log "github.com/cihub/seelog"
 
-	"github.com/BurntSushi/toml"
-	"github.com/garyburd/redigo/redis"
 	"math/rand"
 	"os"
+
+	"github.com/BurntSushi/toml"
+	"github.com/garyburd/redigo/redis"
 
 	"sample/DBI"
 	"sample/conf/gameConf"
@@ -23,96 +24,11 @@ var (
 	ctx context.Context
 )
 
-// redis ConnectionPooling
-func newPool(gameConf *gameConf.GameConfig) *redis.Pool {
-	// KVSのpoolを取得
-	return &redis.Pool{
-
-		MaxIdle:     3,
-		IdleTimeout: 240 * time.Second,
-
-		Dial: func() (redis.Conn, error) {
-			c, err := redis.Dial("tcp", gameConf.Kvs.Host+":"+gameConf.Kvs.Port)
-
-			if err != nil {
-				return nil, err
-			}
-			return c, err
-		},
-
-		TestOnBorrow: func(c redis.Conn, t time.Time) error {
-			_, err := c.Do("PING")
-			return err
-		},
-	}
-}
-
-func Custom() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		t := time.Now()
-
-		// set global context
-		c.Set("globalContext", ctx)
-
-		// リクエスト前処理
-		defer log.Flush()
-
-		// ランダムシード
-		rand.Seed(time.Now().UnixNano())
-		c.Set("slaveIndex", DBI.DecideUseSlave())
-
-		c.Next()
-
-		// リクエスト後処理
-		latency := time.Since(t)
-		log.Info("latency : ", latency)
-
-		// access the status we are sending
-		// status := c.Writer.Status()
-		// log.Info(status)
-	}
-}
-
-func setLoggerConfig() {
-	// PJ直下で実装した場合
-	logger, err := log.LoggerFromConfigAsFile("./conf/seelog/development.xml")
-
-	if err != nil {
-		panic("fail to load logger setting")
-	}
-
-	log.ReplaceLogger(logger)
-
-}
-
-func loadGameConfig() *gameConf.GameConfig {
-	var gameConf gameConf.GameConfig
-
-	gameMode := os.Getenv("GAMEMODE")
-
-	// config load
-	var filename string
-	switch gameMode {
-	case "PRODUCTION":
-		log.Info("SET PRODUCTION MODE...")
-
-	case "DEVELOPMENT":
-		log.Info("SET DEVELOPMENT MODE...")
-
-	default:
-		log.Info("SET LOCAL MODE...")
-		filename = "local"
-	}
-
-	_, err := toml.DecodeFile("./conf/game/"+filename+".toml", &gameConf)
-	if err != nil {
-		log.Critical("gameConf "+filename+".toml error!!", err)
-		os.Exit(1)
-	}
-
-	return &gameConf
-}
-
+/**************************************************************************************************/
+/*!
+ *  main
+ */
+/**************************************************************************************************/
 func main() {
 	var err error
 	// context
@@ -149,5 +65,121 @@ func main() {
 	// 存在しないルート時
 	if err != nil {
 		log.Critical(err)
+	}
+}
+
+/**************************************************************************************************/
+/*!
+ *  リクエスト毎の処理のカスタム
+ *
+ *  \return  ハンドラ
+ */
+/**************************************************************************************************/
+func Custom() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		t := time.Now()
+
+		// set global context
+		c.Set("globalContext", ctx)
+
+		// リクエスト前処理
+		defer log.Flush()
+
+		// ランダムシード
+		rand.Seed(time.Now().UnixNano())
+		c.Set("slaveIndex", DBI.DecideUseSlave())
+
+		c.Next()
+
+		// リクエスト後処理
+		latency := time.Since(t)
+		log.Info("latency : ", latency)
+
+		// access the status we are sending
+		// status := c.Writer.Status()
+		// log.Info(status)
+	}
+}
+
+/**************************************************************************************************/
+/*!
+ *  loggerの設定
+ */
+/**************************************************************************************************/
+func setLoggerConfig() {
+	// PJ直下で実装した場合
+	logger, err := log.LoggerFromConfigAsFile("./conf/seelog/development.xml")
+
+	if err != nil {
+		panic("fail to load logger setting")
+	}
+
+	log.ReplaceLogger(logger)
+
+}
+
+/**************************************************************************************************/
+/*!
+ *  アプリの設定をロードする
+ *
+ *  \return  gameConfig
+ */
+/**************************************************************************************************/
+func loadGameConfig() *gameConf.GameConfig {
+	var gameConf gameConf.GameConfig
+
+	gameMode := os.Getenv("GAMEMODE")
+
+	// config load
+	var filename string
+	switch gameMode {
+	case "PRODUCTION":
+		log.Info("SET PRODUCTION MODE...")
+
+	case "DEVELOPMENT":
+		log.Info("SET DEVELOPMENT MODE...")
+
+	default:
+		log.Info("SET LOCAL MODE...")
+		filename = "local"
+	}
+
+	_, err := toml.DecodeFile("./conf/game/"+filename+".toml", &gameConf)
+	if err != nil {
+		log.Critical("gameConf "+filename+".toml error!!", err)
+		os.Exit(1)
+	}
+
+	return &gameConf
+}
+
+/**************************************************************************************************/
+/*!
+ *  redisのプールを取得
+ *
+ *  \param   gameConf : ゲームの設定
+ *  \return  プール
+ */
+/**************************************************************************************************/
+func newPool(gameConf *gameConf.GameConfig) *redis.Pool {
+	// KVSのpoolを取得
+	return &redis.Pool{
+
+		MaxIdle:     3,
+		IdleTimeout: 240 * time.Second,
+
+		Dial: func() (redis.Conn, error) {
+			c, err := redis.Dial("tcp", gameConf.Kvs.Host+":"+gameConf.Kvs.Port)
+
+			if err != nil {
+				return nil, err
+			}
+			return c, err
+		},
+
+		TestOnBorrow: func(c redis.Conn, t time.Time) error {
+			_, err := c.Do("PING")
+			return err
+		},
 	}
 }
