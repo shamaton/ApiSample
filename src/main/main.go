@@ -16,7 +16,6 @@ import (
 
 	"sample/DBI"
 	"sample/conf/gameConf"
-	"sample/controller"
 )
 
 // global
@@ -55,16 +54,30 @@ func main() {
 	router.Use(Custom())
 
 	// make route
-	router.POST("/test", controller.Test)
-	router.POST("/token_test", controller.TokenTest)
-
-	router.GET("/shamoto", controller.Shamoto)
+	makeRoute(router)
 
 	err = router.Run(":9999")
 
 	// 存在しないルート時
 	if err != nil {
 		log.Critical(err)
+	}
+}
+
+/**************************************************************************************************/
+/*!
+ *  routing
+ */
+/**************************************************************************************************/
+func makeRoute(router *gin.Engine) {
+	// POST
+	for k, v := range routerPostConf {
+		router.POST("/"+k, v)
+	}
+
+	// GET
+	for k, v := range routerGetConf {
+		router.POST("/"+k, v)
 	}
 }
 
