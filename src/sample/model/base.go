@@ -741,7 +741,7 @@ func (b *base) getTableInfoFromStructData(c *gin.Context, holder interface{}, db
 			continue
 		}
 		// シーケンシャルIDで値が設定されてない場合は採番する
-		if isINSorUPD && tag.Get("seq") == "true" {
+		if isINSorUPD && tag.Get("seq") == "t" {
 			if value.(uint64) < 1 {
 				value, err = b.getSeqId(c)
 				if err != nil {
@@ -753,14 +753,14 @@ func (b *base) getTableInfoFromStructData(c *gin.Context, holder interface{}, db
 		columns = append(columns, column)
 
 		// PKは検索条件とし、それ以外は値を取得する
-		if tag.Get("pk") == "true" {
+		if tag.Get("pk") == "t" {
 			pkMap[column] = value
 		} else {
 			valueMap[column] = value
 		}
 
 		// shard keyを取得
-		if dbTableConf.IsUseTypeShard() && tag.Get("shard") == "true" {
+		if dbTableConf.IsUseTypeShard() && tag.Get("shard") == "t" {
 			// 2度設定はダメ
 			if shardKey != nil {
 				err = errors.New("multiple shard key not available!!")

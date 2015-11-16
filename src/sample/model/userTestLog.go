@@ -7,8 +7,8 @@ import (
 )
 
 type UserTestLog struct {
-	Id        uint64    `pk:"true" seq:"true"`
-	UserId    uint64    `db:"user_id" shard:"true"`
+	Id        uint64    `pk:"t" seq:"t"`
+	UserId    uint64    `db:"user_id" shard:"t"`
 	TestValue uint      `db:"test_value"`
 	CreatedAt time.Time `db:"created_at"`
 }

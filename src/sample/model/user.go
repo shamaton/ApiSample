@@ -8,7 +8,7 @@ import (
 )
 
 type User struct {
-	Id        uint64 `pk:"true" shard:"true"`
+	Id        uint64 `pk:"t" shard:"t"`
 	Name      string
 	Score     uint
 	CreatedAt time.Time `db:"created_at"`
