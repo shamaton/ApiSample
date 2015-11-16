@@ -1,5 +1,13 @@
 package model
 
+/**************************************************************************************************/
+/*!
+ *  user.go
+ *
+ *  table : userのmodelクラス
+ *
+ */
+/**************************************************************************************************/
 import (
 	"time"
 
@@ -15,8 +23,9 @@ type User struct {
 	UpdatedAt time.Time `db:"updated_at"`
 }
 
-// user
-/////////////////////////////
+/**
+ * Interface
+ */
 type UserRepo interface {
 	FindByID(*gin.Context, uint64, ...interface{}) (*User, error)
 
@@ -33,15 +42,33 @@ type UserRepo interface {
 	FindsTest(*gin.Context)
 }
 
+/**************************************************************************************************/
+/*!
+ *  リポジトリ操作オブジェクトの生成
+ */
+/**************************************************************************************************/
 func NewUserRepo() UserRepo {
 	b := &base{table: "user"}
 	return UserRepoImpl{b}
 }
 
+/**
+ * Implementer
+ */
 type UserRepoImpl struct {
 	*base
 }
 
+/**************************************************************************************************/
+/*!
+ *  ユーザーIDで検索する
+ *
+ *  \param   c       : コンテキスト
+ *  \param   id      : ユーザーID
+ *  \param   options : オプション
+ *  \return  ユーザーデータ(エラー時はnil)、エラー
+ */
+/**************************************************************************************************/
 func (r UserRepoImpl) FindByID(c *gin.Context, id uint64, options ...interface{}) (*User, error) {
 	var user = new(User)
 	user.Id = id
