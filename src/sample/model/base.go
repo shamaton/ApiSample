@@ -974,8 +974,6 @@ func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) 
 	// すべてを結合
 	pred = strings.Join(allSentence, " ")
 
-	log.Debug(pred, " : ", args)
-
 	return pred, args, err
 }
 
