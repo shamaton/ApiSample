@@ -91,9 +91,9 @@ func Test(c *gin.Context) {
 	}
 
 	// CREATE MULTI TEST
-	var users []*model.User
-	users = append(users, user)
-	users = append(users, &prevUser)
+	var users []model.User
+	users = append(users, *user)
+	users = append(users, prevUser)
 	err = userRepo.CreateMulti(c, &users)
 	if checkErr(c, err, "user insert multi error") {
 		return

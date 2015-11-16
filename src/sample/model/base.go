@@ -398,7 +398,7 @@ func (b *base) Create(c *gin.Context, holder interface{}) error {
 /*!
  *  データ構造体配列からINSERT MULTIを実行する
  *
- *  &(array)[ &{struct}, &{struct}, ...] のようなデータを想定している
+ *  &(array)[ struct{}, struct{}, ...] のようなデータを想定している
  *
  *  \param   c      : コンテキスト
  *  \param   holder : テーブルデータ構造体配列
@@ -717,8 +717,15 @@ func (b *base) getTableInfoFromStructData(c *gin.Context, holder interface{}, db
 	var pkMap = builder.Eq{}
 	var valueMap = map[string]interface{}{}
 
+	var val reflect.Value
+	// ポインタの場合、構造体の実体を取得する
+	if reflect.ValueOf(holder).Kind() == reflect.Ptr {
+		val = reflect.ValueOf(holder).Elem()
+	} else {
+		val = reflect.ValueOf(holder)
+	}
+
 	// 実体の要素を把握する
-	val := reflect.ValueOf(holder).Elem()
 	for i := 0; i < val.NumField(); i++ {
 		// 変数定義
 		field := val.Type().Field(i)
