@@ -604,6 +604,8 @@ func (b *base) Save(c *gin.Context, holder interface{}) error {
 	var values []interface{}
 	var dupCols []string
 	var dupValues []interface{}
+
+	// NOTE : マップで回すとカラムの順序がおかしくなる
 	for _, column := range columns {
 		if v, ok := pkMap[column]; ok {
 			values = append(values, v)
