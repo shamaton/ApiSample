@@ -18,6 +18,7 @@ type UserItem struct {
 	UserId    uint64 `db:"user_id" pk:"t" shard:"t"`
 	ItemId    int    `db:"item_id" pk:"t"`
 	Num       int
+	UsedNum   int       `db:"used_num"`
 	CreatedAt time.Time `db:"created_at"`
 	UpdatedAt time.Time `db:"updated_at"`
 }

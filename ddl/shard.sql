@@ -17,6 +17,7 @@ CREATE TABLE `user_item` (
   user_id bigint(20) unsigned NOT NULL,
   item_id int(11) unsigned NOT NULL,
   num int(11) unsigned NOT NULL,
+  used_num int(11) unsigned NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`user_id`, `item_id`)

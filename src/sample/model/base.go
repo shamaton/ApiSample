@@ -602,25 +602,27 @@ func (b *base) Save(c *gin.Context, holder interface{}) error {
 
 	// values収集
 	var values []interface{}
+	var dupCols []string
+	var dupValues []interface{}
 	for _, column := range columns {
 		if v, ok := pkMap[column]; ok {
 			values = append(values, v)
 		} else if v, ok := valueMap[column]; ok {
 			values = append(values, v)
+			dupCols = append(dupCols, column+" = ?")
+			dupValues = append(dupValues, v)
 		} else {
 			return errors.New("unknown column found!!")
 		}
 	}
 
-	pkSql, pkArgs, err := pkMap.ToSql()
-	if err != nil {
-		return err
-	}
-	suffix := strings.Join([]string{"ON DUPLICATE KEY UPDATE", pkSql}, " ")
+	// DUPLICATE文作成
+	dupStr := strings.Join(dupCols, ", ")
+	suffix := strings.Join([]string{"ON DUPLICATE KEY UPDATE", dupStr}, " ")
 
 	// SQL生成
 	columnStr := strings.Join(columns, ",")
-	sql, args, err := builder.Insert(b.table).Columns(columnStr).Values(values...).Suffix(suffix, pkArgs...).ToSql()
+	sql, args, err := builder.Insert(b.table).Columns(columnStr).Values(values...).Suffix(suffix, dupValues...).ToSql()
 	if err != nil {
 		log.Error("sql maker error!!")
 		return err
