@@ -1,62 +1,70 @@
 package cache
-/*
+
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/garyburd/redigo/redis"
+	"errors"
+	"strings"
+	"time"
+
+	log "github.com/cihub/seelog"
 )
 
+type cacheMap map[string]interface{}
+type cacheInfoMap map[string]int64
 
-type TxError struct {
-	Err   error
-	TxErr error
-}
-func (t TxError) Error() string {
-	return fmt.Sprintf("Transaction Error: Err(%v) TxErr(%v)", t.Err, t.TxErr)
+const (
+	local int64 = iota
+)
+
+var __cache_data = cacheMap{}
+var __cache_info = map[string]cacheInfoMap{}
+
+// tableName_key -> {data:data}
+// tableName_key -> {expire:10, expired_at:時間}
+
+func Set(category string, key string, data interface{}) {
+	strs := []string{category, key}
+	uniqueKey := strings.Join(strs, "_")
+
+	// cache_info_mapを作成
+	cache_type := local
+	expire := int64(10)
+	expiredAt := time.Now().Unix() + expire
+	ci := cacheInfoMap{"type": cache_type, "expire": expire, "expired_at": expiredAt}
+	__cache_info[uniqueKey] = ci
+
+	// data cache
+	__cache_data[uniqueKey] = data
 }
 
-func Tx(db *sql.DB, fn func(tx *sql.Tx) error) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return TxError{ err, nil }
+func Get(category string, key string) (interface{}, error) {
+
+	uniqueKey := getUniqueKey(category, key)
+	ci, isValid := __cache_info[uniqueKey]
+	if !isValid {
+		log.Debug("not fuond cache info -------------------> ")
+		//err = errors.New("unique key ["+uniqueKey+"] is invalid!!")
+		return nil, nil
 	}
 
-	if err := fn(tx); err != nil {
-		return TxError{ err, tx.Rollback() }
+	// 期限切れはエラーではない
+	expiredAt, isValid := ci["expired_at"]
+	if !(isValid && time.Now().Unix() <= expiredAt) {
+		log.Debug("expired -------------------> ")
+		return nil, nil
 	}
-	if err := tx.Commit(); err != nil {
-		return TxError{ nil, err }
+
+	// typeごとに取得
+
+	// データ取得
+	data, isValid := __cache_data[uniqueKey]
+	if !isValid {
+		err := errors.New("unique key [" + uniqueKey + "] is invalid!!")
+		return nil, err
 	}
-
-	return nil
+	return data, nil
 }
 
-func Set(c *gin.Context) {
-
+func getUniqueKey(category, key string) string {
+	strs := []string{category, key}
+	return strings.Join(strs, "_")
 }
-
-
-type Cache interface {
-	FindByID(int) (*User, error)
-}
-
-func NewUserRepo(c *gin.Context) UserRepo {
-	tx, _ := DBI.GetDBSession(c)
-	db, _ := DBI.GetDBConnection(c, "user")
-
-	return UserRepoImpl{db: db, tx: tx}
-}
-
-type CacheImpl struct {
-	conn redis.Pool
-}
-
-func (r UserRepoImpl) FindByID(id int) (*User, error) {
-	user := new(User)
-	var err error
-
-	user.Id = id
-	_, err = r.db.Get(user)
-
-	return user, err
-}
-*/
