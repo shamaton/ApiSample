@@ -103,6 +103,14 @@ func (r UserShardRepoImpl) FindByUserId(c *gin.Context, userId interface{}, opti
 	return &userShard, err
 }
 
+/**************************************************************************************************/
+/*!
+ *  データ全取得
+ *
+ *  \param   c : コンテキスト
+ *  \return  全データ、エラー
+ */
+/**************************************************************************************************/
 func (impl UserShardRepoImpl) finds(c *gin.Context) (*[]UserShard, error) {
 	// ハンドル取得
 	conn, err := DBI.GetDBMasterConnection(c, DBI.MODE_R)
@@ -127,6 +135,14 @@ func (impl UserShardRepoImpl) finds(c *gin.Context) (*[]UserShard, error) {
 	return &allData, nil
 }
 
+/**************************************************************************************************/
+/*!
+ *  キャッシュ生成
+ *
+ *  \param   c         : コンテキスト
+ *  \return  cacheGetしたものと同等のデータ、エラー
+ */
+/**************************************************************************************************/
 func (impl UserShardRepoImpl) makeCache(c *gin.Context) (interface{}, error) {
 	allData, err := impl.finds(c)
 	if err != nil {
@@ -141,6 +157,15 @@ func (impl UserShardRepoImpl) makeCache(c *gin.Context) (interface{}, error) {
 	return dataMap, nil
 }
 
+/**************************************************************************************************/
+/*!
+ *  シャードデータ作成
+ *
+ *  \param   c         : コンテキスト
+ *  \param   userShard : データ構造体
+ *  \return  失敗時、エラー
+ */
+/**************************************************************************************************/
 func (impl UserShardRepoImpl) Create(c *gin.Context, userShard *UserShard) error {
 	// SQL生成
 	sql, args, err := builder.Insert("user_shard").Options("IGNORE").Values(userShard.Id, userShard.ShardId).ToSql()
