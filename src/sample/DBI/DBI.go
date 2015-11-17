@@ -600,7 +600,7 @@ func GetDBMasterConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
 	var conn *gorp.DbMap
 	var err error
 
-	gc := c.Value("globalContext").(context.Context)
+	gc := c.Value(ckey.GContext).(context.Context)
 
 	switch mode {
 	case MODE_W:
@@ -662,7 +662,7 @@ func GetDBShardMap(c *gin.Context, mode string) (map[int]*gorp.DbMap, error) {
 	var err error
 	var shardMap map[int]*gorp.DbMap
 
-	gc := c.Value("globalContext").(context.Context)
+	gc := c.Value(ckey.GContext).(context.Context)
 
 	switch mode {
 	case MODE_W:

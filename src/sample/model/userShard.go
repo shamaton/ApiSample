@@ -28,6 +28,8 @@ type UserShard struct {
 /////////////////////////////
 type UserShardRepo interface {
 	FindByUserId(*gin.Context, interface{}, ...interface{}) (*UserShard, error)
+
+	Create(*gin.Context, *UserShard) error
 }
 
 func NewUserShardRepo() UserShardRepo {
@@ -137,4 +139,28 @@ func (impl UserShardRepoImpl) makeCache(c *gin.Context) (interface{}, error) {
 	}
 	cache.Set(impl.table, "all", dataMap)
 	return dataMap, nil
+}
+
+func (impl UserShardRepoImpl) Create(c *gin.Context, userShard *UserShard) error {
+	// SQL生成
+	sql, args, err := builder.Insert("user_shard").Options("IGNORE").Values(userShard.Id, userShard.ShardId).ToSql()
+	if err != nil {
+		log.Error("sql maker error!!")
+		return err
+	}
+
+	// get master tx
+	tx, err := DBI.GetTransaction(c, DBI.MODE_W, false, 0)
+	if err != nil {
+		log.Error("transaction error!!")
+		return err
+	}
+
+	// create
+	log.Critical(sql, args)
+	_, err = tx.Exec(sql, args...)
+	if err != nil {
+		return err
+	}
+	return nil
 }

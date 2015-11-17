@@ -23,6 +23,7 @@ import (
 	"github.com/garyburd/redigo/redis"
 
 	"sample/DBI"
+	ckey "sample/conf/context"
 	"sample/conf/gameConf"
 )
 
@@ -56,7 +57,7 @@ func main() {
 
 	// redis
 	redis_pool := newPool(gameConf)
-	ctx = context.WithValue(ctx, "redis", redis_pool)
+	ctx = context.WithValue(ctx, ckey.MemdPool, redis_pool)
 
 	router := gin.Default()
 	router.Use(Custom())
@@ -101,14 +102,14 @@ func Custom() gin.HandlerFunc {
 		t := time.Now()
 
 		// set global context
-		c.Set("globalContext", ctx)
+		c.Set(ckey.GContext, ctx)
 
 		// リクエスト前処理
 		defer log.Flush()
 
 		// ランダムシード
 		rand.Seed(time.Now().UnixNano())
-		c.Set("slaveIndex", DBI.DecideUseSlave())
+		c.Set(ckey.SlaveIndex, DBI.DecideUseSlave())
 
 		c.Next()
 

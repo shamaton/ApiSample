@@ -17,7 +17,7 @@ type UserTestLogRepo interface {
 	FindByID(*gin.Context, uint64, ...interface{}) *UserTestLog
 
 	Create(*gin.Context, *UserTestLog) error
-	CreateMulti(*gin.Context, *[]*UserTestLog) error
+	CreateMulti(*gin.Context, *[]UserTestLog) error
 
 	Delete(*gin.Context, interface{}) error
 }
@@ -47,7 +47,7 @@ func (r UserTestLogRepoImpl) Create(c *gin.Context, userTestLog *UserTestLog) er
 	return err
 }
 
-func (r UserTestLogRepoImpl) CreateMulti(c *gin.Context, userTestLogs *[]*UserTestLog) error {
+func (r UserTestLogRepoImpl) CreateMulti(c *gin.Context, userTestLogs *[]UserTestLog) error {
 	err := r.base.CreateMulti(c, userTestLogs)
 	return err
 }

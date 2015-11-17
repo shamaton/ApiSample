@@ -10,6 +10,9 @@ import (
 	"encoding/json"
 	"fmt"
 	db "sample/DBI"
+
+	ckey "sample/conf/context"
+
 	"time"
 
 	log "github.com/cihub/seelog"
@@ -19,166 +22,341 @@ import (
 	"golang.org/x/net/context"
 )
 
-// JSON from POST
-type PostJSON struct {
-	Name  string `json:"Name" binding:"required"`
-	Score int    `json:"Score" binding:"required"`
-}
-
 type postData struct {
 	Name  string `json:"Name"`
 	Score int    `json:"Score"`
 }
 
-func Test(c *gin.Context) {
+/**************************************************************************************************/
+/*!
+ *  user select test api
+ */
+/**************************************************************************************************/
+func TestUserSelect(c *gin.Context) {
 	defer db.RollBack(c)
+
+	// JSON from POST
+	type PostJSON struct {
+		Id uint64 `json:"Id" binding:"required"`
+	}
 
 	var json PostJSON
 	err := c.BindJSON(&json)
-	if checkErr(c, err, "json error") {
+	if err != nil {
+		errorJson(c, "json error", err)
 		return
 	}
 
-	ctx := c.Value("globalContext").(context.Context)
-
-	// MEMD TEST
-	redisTest(ctx)
-
 	// FIND TEST
 	userRepo := model.NewUserRepo()
-	user, err := userRepo.FindByID(c, 2)
-	if checkErr(c, err, "user error") {
+	user := userRepo.FindById(c, json.Id)
+	if user == nil {
+		errorJson(c, "user find_by_id error", nil)
 		return
 	}
 	log.Debug(pp.Println(user))
 
-	var option = model.Option{"mode": db.MODE_R, "shard_id": 2}
-	user, err = userRepo.FindByID(c, 3, option)
-	if checkErr(c, err, "user error 2nd") {
+	// FIND(USE OPTION)
+	var option = model.Option{"mode": db.MODE_W}
+	user = userRepo.FindById(c, 3, option)
+	if user == nil {
+		errorJson(c, "user find_by_id(use option) error", nil)
 		return
 	}
-	log.Debug(user)
+	log.Debug("user find(option)", user)
 
 	// FINDS TEST
 	userRepo.FindsTest(c)
 
+	// COUNT TEST
+	whereCond := model.WhereCondition{{"id", "IN", model.In{1, 2, 3}}}
+	condition := model.Condition{"where": whereCond}
+	option = model.Option{"shard_key": uint64(1)}
+
+	count, err := userRepo.Count(c, condition, option)
+	if err != nil {
+		errorJson(c, "user count error", err)
+		return
+	}
+	log.Debug("user count : ", count)
+
+	c.JSON(http.StatusOK, user)
+}
+
+/**************************************************************************************************/
+/*!
+ *  user create test api
+ */
+/**************************************************************************************************/
+func TestUserCreate(c *gin.Context) {
+	defer db.RollBack(c)
+
+	// JSON from POST
+	type PostJSON struct {
+		Name string `json:"Name" binding:"required"`
+		//UUID  string `json:"Name" binding:"required"`
+	}
+	var json PostJSON
+	err := c.BindJSON(&json)
+	if err != nil {
+		errorJson(c, "json error", err)
+		return
+	}
+
+	// NOTE : 一度しか生成できない
+	userId := uint64(4)
+
+	// ユーザ登録するshardを選択して登録
+	shardId := 1
+
+	userShardRepo := model.NewUserShardRepo()
+	userShard := &model.UserShard{Id: int(userId), ShardId: shardId}
+	err = userShardRepo.Create(c, userShard)
+	if err != nil {
+		errorJson(c, "user shard create error ", err)
+		return
+	}
+	// シャード生成のため一旦コミット
+	db.Commit(c)
+
+	// レプリ待ち
+	time.Sleep(500 * time.Millisecond)
+
+	// CREATE
+	userRepo := model.NewUserRepo()
+
+	newUser := model.User{Id: userId, Name: json.Name}
+	err = userRepo.Create(c, newUser)
+	if err != nil {
+		errorJson(c, "user create error ", err)
+		return
+	}
+	// COMMIT
+	db.Commit(c)
+
+	c.JSON(http.StatusOK, newUser)
+}
+
+/**************************************************************************************************/
+/*!
+ *  user update test api
+ */
+/**************************************************************************************************/
+func TestUserUpdate(c *gin.Context) {
+	defer db.RollBack(c)
+
+	// JSON from POST
+	type PostJSON struct {
+		Id       uint64 `json:"Id" binding:"required"`
+		AddScore uint   `json:"AddScore" binding:"required"`
+	}
+
+	var json PostJSON
+	err := c.BindJSON(&json)
+	if err != nil {
+		errorJson(c, "json error", err)
+		return
+	}
+
+	userRepo := model.NewUserRepo()
+
+	// レコードがあるか確認
+	user := userRepo.FindById(c, json.Id)
+	if user == nil {
+		errorJson(c, "user not found!!", nil)
+		return
+	}
+
 	// UPDATE TEST
-	option = model.Option{"for_update": 1}
-	user, err = userRepo.FindByID(c, 3, option)
-	if checkErr(c, err, "user for update error") {
+	option := model.Option{"for_update": 1}
+	user = userRepo.FindById(c, json.Id, option)
+	if user == nil {
+		errorJson(c, "user not found!!", nil)
 		return
 	}
 	log.Debug(user)
 
+	// 今のデータをコピーしてスコア更新
 	prevUser := *user
-	user.Score += 100
+	user.Score += json.AddScore
 
 	err = userRepo.Update(c, user, &prevUser)
-	if checkErr(c, err, "user for update error") {
+	if err != nil {
+		errorJson(c, "user update error!!", err)
 		return
 	}
-
-	// DELETE TEST
-	err = userRepo.Delete(c, user)
-	if checkErr(c, err, "user for delete error") {
-		return
-	}
-
-	// CREATE TEST
-	err = userRepo.Create(c, user)
-	if checkErr(c, err, "user insert error") {
-		return
-	}
-
-	// CREATE MULTI TEST
-	var users []model.User
-	users = append(users, *user)
-	users = append(users, prevUser)
-	err = userRepo.CreateMulti(c, &users)
-	if checkErr(c, err, "user insert multi error") {
-		return
-	}
-
-	// COUNT TEST
-	condition := model.Condition{"where": model.WhereCondition{{"id", "IN", model.In{1, 2, 3}}}}
-	option = model.Option{"shard_key": uint64(1)}
-	count, err := userRepo.Count(c, condition, option)
-	if checkErr(c, err, " count error") {
-		return
-	}
-	log.Debug("count : ", count)
-
-	// SAVE TEST
-	err = userRepo.Save(c, user)
-	if checkErr(c, err, " save error") {
-		return
-	}
-
-	// SEQUENCE TEST
-	logData := new(model.UserTestLog)
-	logData.UserId = 3
-	logData.TestValue = 1000
-	logRepo := model.NewUserTestLogRepo()
-	err = logRepo.Create(c, logData)
-	if checkErr(c, err, " log create error ") {
-		return
-	}
-
-	var logDatas []*model.UserTestLog
-	logData2 := new(model.UserTestLog)
-	logData2.UserId = 1
-	logData2.TestValue = 101
-	logDatas = append(logDatas, logData, logData2)
-	if err = logRepo.CreateMulti(c, &logDatas); checkErr(c, err, " log creates error ") {
-		return
-	}
-
-	time.Sleep(0 * time.Second)
-
+	// COMMIT
 	db.Commit(c)
 
 	c.JSON(http.StatusOK, user)
 }
 
-func TokenTest(c *gin.Context) {
+/**************************************************************************************************/
+/*!
+ *  user item create test api
+ */
+/**************************************************************************************************/
+func TestUserItemCreate(c *gin.Context) {
+	defer db.RollBack(c)
 
-	var hoge postData
-	data := c.PostForm("data")
-	dd := []byte(data)
-	json.Unmarshal(dd, &hoge)
-	log.Info(hoge)
-
-	token := c.PostForm("token")
-	log.Info(token)
-
-	// tokenをjsonにもどす
-	tokenData, _ := base64.StdEncoding.DecodeString(token)
-
-	var d postData
-	err := json.Unmarshal(tokenData, &d)
-	log.Info(d)
-
-	checkErr(c, err, "token test error")
-
-	// sha256
-	recv_sha := c.PostForm("sha")
-	log.Info(recv_sha)
-
-	hash := hmac.New(sha256.New, []byte("secret_key"))
-	hash.Write([]byte("apple"))
-	hashsum := fmt.Sprintf("%x", hash.Sum(nil))
-	log.Infof(hashsum)
-
-	if recv_sha == hashsum {
-		log.Info("sha correct!!")
+	// JSON from POST
+	type PostJSON struct {
+		UserId uint64 `json:"UserId" binding:"required"`
+		ItemId int    `json:"ItemId" binding:"required"`
+		Num    int    `json:"Num" binding:"required"`
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "hello"})
+	var json PostJSON
+	err := c.BindJSON(&json)
+	if err != nil {
+		errorJson(c, "json error", err)
+		return
+	}
+
+	userItemRepo := model.NewUserItemRepo()
+
+	// 確認不要だが
+	userItem := userItemRepo.FindByPk(c, json.UserId, json.ItemId)
+	log.Debug("userItem -> ", userItem)
+
+	// SAVE TEST
+	saveData := &model.UserItem{UserId: json.UserId, ItemId: json.ItemId, Num: json.Num}
+	err = userItemRepo.Save(c, saveData)
+	if err != nil {
+		errorJson(c, "user item save error ", err)
+		return
+	}
+
+	db.Commit(c)
+
+	c.JSON(http.StatusOK, saveData)
+}
+
+/**************************************************************************************************/
+/*!
+ *  user item delete test api
+ */
+/**************************************************************************************************/
+func TestUserItemDelete(c *gin.Context) {
+	defer db.RollBack(c)
+
+	// JSON from POST
+	type PostJSON struct {
+		UserId uint64 `json:"UserId" binding:"required"`
+		ItemId int    `json:"ItemId" binding:"required"`
+	}
+
+	var json PostJSON
+	err := c.BindJSON(&json)
+	if err != nil {
+		errorJson(c, "json error", err)
+		return
+	}
+
+	userItemRepo := model.NewUserItemRepo()
+
+	// 確認して削除
+	userItem := userItemRepo.FindByPk(c, json.UserId, json.ItemId, model.Option{"mode": db.MODE_W})
+	if userItem == nil {
+		errorJson(c, "not found user item!! ", nil)
+		return
+	}
+
+	// LOCK
+	userItem = userItemRepo.FindByPk(c, json.UserId, json.ItemId, model.Option{"mode": db.MODE_W, "for_update": 1})
+	if userItem == nil {
+		errorJson(c, "not found user item!! ", nil)
+		return
+	}
+
+	// DELETE
+	err = userItemRepo.Delete(c, userItem)
+	if err != nil {
+		errorJson(c, "user item save error ", err)
+		return
+	}
+
+	db.Commit(c)
+
+	c.JSON(http.StatusOK, gin.H{"message": "delete OK"})
+}
+
+/**************************************************************************************************/
+/*!
+ *  user log create test api
+ */
+/**************************************************************************************************/
+func TestUserLogCreate(c *gin.Context) {
+	defer db.RollBack(c)
+
+	// JSON from POST
+	type PostJSON struct {
+		Id    uint64 `json:"Id" binding:"required"`
+		Value uint   `json:"Value" binding:"required"`
+	}
+
+	var json PostJSON
+	err := c.BindJSON(&json)
+	if err != nil {
+		errorJson(c, "json error", err)
+		return
+	}
+
+	// レコードがあるか確認
+	userRepo := model.NewUserRepo()
+	user := userRepo.FindById(c, json.Id)
+	if user == nil {
+		errorJson(c, "user not found!!", nil)
+		return
+	}
+
+	logRepo := model.NewUserTestLogRepo()
+
+	// SEQUENCE TEST
+	// CREATE
+	logData := &model.UserTestLog{UserId: json.Id, TestValue: json.Value}
+	err = logRepo.Create(c, logData)
+	if err != nil {
+		errorJson(c, "log create error!! ", err)
+		return
+	}
+
+	// CREATE MULTI
+	var logDatas []model.UserTestLog
+
+	logData1 := model.UserTestLog{UserId: 3, TestValue: 123}
+	logData2 := model.UserTestLog{UserId: 3, TestValue: 4567}
+	logDatas = append(logDatas, logData1, logData2)
+	if err = logRepo.CreateMulti(c, &logDatas); err != nil {
+		errorJson(c, "log create multi error!! ", err)
+		return
+	}
+
+	// COMMIT
+	db.Commit(c)
+
+	c.JSON(http.StatusOK, gin.H{"message": "log creates done"})
+}
+
+/**************************************************************************************************/
+/*!
+ *  user misc test api
+ */
+/**************************************************************************************************/
+func TestUserMisc(c *gin.Context) {
+	defer db.RollBack(c)
+
+	ctx := c.Value(ckey.GContext).(context.Context)
+
+	// MEMD TEST
+	redisTest(ctx)
+
+	c.JSON(http.StatusOK, gin.H{})
 }
 
 func redisTest(ctx context.Context) {
 
-	redis_pool := ctx.Value("redis").(*redis.Pool)
+	redis_pool := ctx.Value(ckey.MemdPool).(*redis.Pool)
 	redis_conn := redis_pool.Get()
 
 	var err error
@@ -198,15 +376,58 @@ func redisTest(ctx context.Context) {
 	if err != nil {
 		log.Error("error expire ", err)
 	}
-
 }
 
-// エラー表示
-func checkErr(c *gin.Context, err error, msg string) bool {
+/**************************************************************************************************/
+/*!
+ *  token test api
+ */
+/**************************************************************************************************/
+func TokenTest(c *gin.Context) {
+
+	var hoge postData
+	data := c.PostForm("data")
+	dd := []byte(data)
+	json.Unmarshal(dd, &hoge)
+	log.Info(hoge)
+
+	token := c.PostForm("token")
+	log.Info(token)
+
+	// tokenをjsonにもどす
+	tokenData, _ := base64.StdEncoding.DecodeString(token)
+
+	var d postData
+	err := json.Unmarshal(tokenData, &d)
+	log.Info(d)
+
 	if err != nil {
-		log.Error(msg, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
-		return true
+		errorJson(c, "token test error!! ", err)
+		return
 	}
-	return false
+
+	// sha256
+	recv_sha := c.PostForm("sha")
+	log.Info(recv_sha)
+
+	hash := hmac.New(sha256.New, []byte("secret_key"))
+	hash.Write([]byte("apple"))
+	hashsum := fmt.Sprintf("%x", hash.Sum(nil))
+	log.Infof(hashsum)
+
+	if recv_sha == hashsum {
+		log.Info("sha correct!!")
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "hello"})
+}
+
+/**************************************************************************************************/
+/*!
+ *  エラー投げる
+ */
+/**************************************************************************************************/
+func errorJson(c *gin.Context, msg string, err error) {
+	log.Error(msg, " : ", err)
+	c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
 }

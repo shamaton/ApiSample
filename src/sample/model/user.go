@@ -27,7 +27,7 @@ type User struct {
  * Interface
  */
 type UserRepo interface {
-	FindByID(*gin.Context, uint64, ...interface{}) (*User, error)
+	FindById(*gin.Context, uint64, ...interface{}) *User
 
 	Update(*gin.Context, interface{}, ...interface{}) error
 	Create(*gin.Context, interface{}) error
@@ -66,14 +66,17 @@ type UserRepoImpl struct {
  *  \param   c       : コンテキスト
  *  \param   id      : ユーザーID
  *  \param   options : オプション
- *  \return  ユーザーデータ(エラー時はnil)、エラー
+ *  \return  ユーザーデータ(エラー時はnil)
  */
 /**************************************************************************************************/
-func (r UserRepoImpl) FindByID(c *gin.Context, id uint64, options ...interface{}) (*User, error) {
+func (r UserRepoImpl) FindById(c *gin.Context, id uint64, options ...interface{}) *User {
 	var user = new(User)
 	user.Id = id
 	err := r.Find(c, user, options...)
-	return user, err
+	if err != nil {
+		return nil
+	}
+	return user
 }
 
 func (r UserRepoImpl) FindsTest(c *gin.Context) {
