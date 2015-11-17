@@ -1,5 +1,13 @@
 package DBI
 
+/**************************************************************************************************/
+/*!
+ *  DBI.go
+ *
+ *  DBのhandle/transaction管理
+ *
+ */
+/**************************************************************************************************/
 import (
 	"database/sql"
 	"errors"
@@ -58,7 +66,7 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
 	// gorpのオブジェクトを取得
 	getGorp := func(dbConf gameConf.DbConfig, host, port, dbName string) (*gorp.DbMap, error) {
 
-		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8", dbConf.User, dbConf.Pass, host, port, dbName)
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8&parseTime=true&loc=Local", dbConf.User, dbConf.Pass, host, port, dbName)
 
 		db, err := sql.Open("mysql", dsn)
 		if err != nil {

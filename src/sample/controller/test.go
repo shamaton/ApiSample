@@ -9,13 +9,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	db "sample/DBI"
+	"time"
+
 	log "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
 	"github.com/k0kubun/pp"
 	"golang.org/x/net/context"
-	db "sample/DBI"
-	"time"
 )
 
 // JSON from POST
@@ -90,9 +91,9 @@ func Test(c *gin.Context) {
 	}
 
 	// CREATE MULTI TEST
-	var users []*model.User
-	users = append(users, user)
-	users = append(users, &prevUser)
+	var users []model.User
+	users = append(users, *user)
+	users = append(users, prevUser)
 	err = userRepo.CreateMulti(c, &users)
 	if checkErr(c, err, "user insert multi error") {
 		return
@@ -110,6 +111,25 @@ func Test(c *gin.Context) {
 	// SAVE TEST
 	err = userRepo.Save(c, user)
 	if checkErr(c, err, " save error") {
+		return
+	}
+
+	// SEQUENCE TEST
+	logData := new(model.UserTestLog)
+	logData.UserId = 3
+	logData.TestValue = 1000
+	logRepo := model.NewUserTestLogRepo()
+	err = logRepo.Create(c, logData)
+	if checkErr(c, err, " log create error ") {
+		return
+	}
+
+	var logDatas []*model.UserTestLog
+	logData2 := new(model.UserTestLog)
+	logData2.UserId = 1
+	logData2.TestValue = 101
+	logDatas = append(logDatas, logData, logData2)
+	if err = logRepo.CreateMulti(c, &logDatas); checkErr(c, err, " log creates error ") {
 		return
 	}
 

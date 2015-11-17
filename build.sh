@@ -10,10 +10,11 @@ cd ${DIR}
 
 # go fmt
 
-echo "go fmt..."
+echo "go fmt and imports..."
 for f in `git diff HEAD --name-status | grep "^M\|^A" | cut -f2 | grep '.go$' `;
 do
   go fmt ./${f};
+  goimports -w ./${f}
 done
 
 echo ""

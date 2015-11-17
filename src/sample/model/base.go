@@ -1,14 +1,26 @@
 package model
 
+/**************************************************************************************************/
+/*!
+ *  base.go
+ *
+ *  テーブルデータ操作で基本的に使用されるベースモジュール
+ *  但し、user_shard, db_table_confは特殊なため使わない
+ *
+ */
+/**************************************************************************************************/
 import (
 	"errors"
-	builder "github.com/Masterminds/squirrel"
-	log "github.com/cihub/seelog"
-	"github.com/gin-gonic/gin"
 	"reflect"
 	db "sample/DBI"
 	"strconv"
 	"strings"
+
+	"fmt"
+
+	builder "github.com/Masterminds/squirrel"
+	log "github.com/cihub/seelog"
+	"github.com/gin-gonic/gin"
 )
 
 // 一旦ここに
@@ -17,6 +29,19 @@ type Condition map[string]interface{}
 type WhereCondition [][]interface{}
 type OrderByCondition [][]string
 type In []interface{}
+
+/**
+ * INSERT UPDATE系で除外するカラム
+ */
+const (
+	createdAt = "created_at"
+	updatedAt = "updated_at"
+)
+
+/**
+ * sequence tableのprefix
+ */
+const seqTablePrefix = "seq_"
 
 // base
 //////////////////////////////
@@ -67,7 +92,7 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
 
 	// holderから各要素を取得
-	columns, _, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	columns, _, pkMap, shardKey, err := b.getTableInfoFromStructData(c, holder, dbTableConf, false)
 	if err != nil {
 		log.Error("read error in struct data")
 		return err
@@ -250,7 +275,7 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
 
 	// holderから各要素を取得
-	_, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	_, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(c, holder, dbTableConf, true)
 	if err != nil {
 		log.Error("read error in struct data")
 		return err
@@ -329,7 +354,7 @@ func (b *base) Create(c *gin.Context, holder interface{}) error {
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
 
 	// holderから各要素を取得
-	columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(c, holder, dbTableConf, true)
 	if err != nil {
 		log.Error("read error in struct data")
 		return err
@@ -356,7 +381,8 @@ func (b *base) Create(c *gin.Context, holder interface{}) error {
 	}
 
 	// SQL生成
-	sql, args, err := builder.Insert(b.table).Options("IGNORE").Values(values...).ToSql()
+	columnStr := strings.Join(columns, ",")
+	sql, args, err := builder.Insert(b.table).Options("IGNORE").Columns(columnStr).Values(values...).ToSql()
 	//sql, args, err := builder.Insert(b.table).Values(values...).ToSql()
 	if err != nil {
 		log.Error("sql maker error!!")
@@ -381,7 +407,7 @@ func (b *base) Create(c *gin.Context, holder interface{}) error {
 /*!
  *  データ構造体配列からINSERT MULTIを実行する
  *
- *  &(array)[ &{struct}, &{struct}, ...] のようなデータを想定している
+ *  &(array)[ struct{}, struct{}, ...] のようなデータを想定している
  *
  *  \param   c      : コンテキスト
  *  \param   holder : テーブルデータ構造体配列
@@ -417,10 +443,11 @@ func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
 	var shardIdMap = map[int]int{} // for check
 	var shardId int
 	var allValues [][]interface{}
+	var columnStr string
 	for i := 0; i < length; i++ {
 		holder := sRef.Index(i).Interface()
 
-		columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+		columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(c, holder, dbTableConf, true)
 		if err != nil {
 			log.Error("read error in struct data")
 			return err
@@ -445,6 +472,11 @@ func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
 		if err != nil {
 			return err
 		}
+
+		// 初回だけ作成
+		if len(columnStr) < 1 {
+			columnStr = strings.Join(columns, ",")
+		}
 	}
 
 	// 取得されたshardIDはユニークであること
@@ -455,7 +487,7 @@ func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
 
 	// SQL生成
 	var ib builder.InsertBuilder
-	ib = builder.Insert(b.table).Options("IGNORE")
+	ib = builder.Insert(b.table).Options("IGNORE").Columns(columnStr)
 
 	// Valuesで接続する
 	for _, values := range allValues {
@@ -502,7 +534,7 @@ func (b *base) Delete(c *gin.Context, holder interface{}) error {
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
 
 	// holderから各要素を取得
-	_, _, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	_, _, pkMap, shardKey, err := b.getTableInfoFromStructData(c, holder, dbTableConf, false)
 	if err != nil {
 		log.Error("read error in struct data")
 		return err
@@ -556,7 +588,7 @@ func (b *base) Save(c *gin.Context, holder interface{}) error {
 	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
 
 	// holderから各要素を取得
-	columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(holder, dbTableConf)
+	columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(c, holder, dbTableConf, true)
 	if err != nil {
 		log.Error("read error in struct data")
 		return err
@@ -589,7 +621,8 @@ func (b *base) Save(c *gin.Context, holder interface{}) error {
 	suffix := strings.Join([]string{"ON DUPLICATE KEY UPDATE", pkSql}, " ")
 
 	// SQL生成
-	sql, args, err := builder.Insert(b.table).Values(values...).Suffix(suffix, pkArgs...).ToSql()
+	columnStr := strings.Join(columns, ",")
+	sql, args, err := builder.Insert(b.table).Columns(columnStr).Values(values...).Suffix(suffix, pkArgs...).ToSql()
 	if err != nil {
 		log.Error("sql maker error!!")
 		return err
@@ -680,10 +713,11 @@ func (b *base) Count(c *gin.Context, condition map[string]interface{}, options .
  *
  *  \param   holder      : テーブルデータ構造体(実体)
  *  \param   dbTableConf : db_table_confマスタ情報
+ *  \param   isINSorUPD  : INSERT or UPDATE時にtrue
  *  \return  カラム、pk以外の値、pkのマップ、shard検索キー、エラー
  */
 /**************************************************************************************************/
-func (b *base) getTableInfoFromStructData(holder interface{}, dbTableConf *DbTableConf) ([]string, map[string]interface{}, builder.Eq, interface{}, error) {
+func (b *base) getTableInfoFromStructData(c *gin.Context, holder interface{}, dbTableConf *DbTableConf, isINSorUPD bool) ([]string, map[string]interface{}, builder.Eq, interface{}, error) {
 	var err error
 
 	var columns []string
@@ -692,8 +726,15 @@ func (b *base) getTableInfoFromStructData(holder interface{}, dbTableConf *DbTab
 	var pkMap = builder.Eq{}
 	var valueMap = map[string]interface{}{}
 
+	var val reflect.Value
+	// ポインタの場合、構造体の実体を取得する
+	if reflect.ValueOf(holder).Kind() == reflect.Ptr {
+		val = reflect.ValueOf(holder).Elem()
+	} else {
+		val = reflect.ValueOf(holder)
+	}
+
 	// 実体の要素を把握する
-	val := reflect.ValueOf(holder).Elem()
 	for i := 0; i < val.NumField(); i++ {
 		// 変数定義
 		field := val.Type().Field(i)
@@ -711,17 +752,31 @@ func (b *base) getTableInfoFromStructData(holder interface{}, dbTableConf *DbTab
 			column = strings.ToLower(field.Name)
 		}
 
+		// INSERT, UPDATEではupdated_atとcreated_atを除外する
+		if isINSorUPD && (column == createdAt || column == updatedAt) {
+			continue
+		}
+		// シーケンシャルIDで値が設定されてない場合は採番する
+		if isINSorUPD && tag.Get("seq") == "t" {
+			if value.(uint64) < 1 {
+				value, err = b.getSeqId(c)
+				if err != nil {
+					return columns, valueMap, pkMap, shardKey, err
+				}
+			}
+		}
+
 		columns = append(columns, column)
 
 		// PKは検索条件とし、それ以外は値を取得する
-		if tag.Get("pk") == "true" {
+		if tag.Get("pk") == "t" {
 			pkMap[column] = value
 		} else {
 			valueMap[column] = value
 		}
 
 		// shard keyを取得
-		if dbTableConf.IsUseTypeShard() && tag.Get("shard") == "true" {
+		if dbTableConf.IsUseTypeShard() && tag.Get("shard") == "t" {
 			// 2度設定はダメ
 			if shardKey != nil {
 				err = errors.New("multiple shard key not available!!")
@@ -928,8 +983,6 @@ func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) 
 	// すべてを結合
 	pred = strings.Join(allSentence, " ")
 
-	log.Debug(pred, " : ", args)
-
 	return pred, args, err
 }
 
@@ -1063,4 +1116,86 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 		mode = db.MODE_W
 	}
 	return mode, isForUpdate, shardKey, shardId, err
+}
+
+/**************************************************************************************************/
+/*!
+ *  SEQUENCE TABLEからシーケンスIDを取得する
+ *
+ *  \param   c : コンテキスト
+ *  \return  シーケンスID、エラー
+ */
+/**************************************************************************************************/
+func (b *base) getSeqId(c *gin.Context) (uint64, error) {
+	seqIds, err := b.getSeqIds(c, 1)
+	if err != nil {
+		return 0, err
+	}
+	seqId := seqIds[0]
+
+	return seqId, err
+}
+
+/**************************************************************************************************/
+/*!
+ *  SEQUENCE TABLEからシーケンスIDを取得する
+ *
+ *  \param   c      : コンテキスト
+ *  \param   getNum : 採番したい数
+ *  \return  シーケンスID、エラー
+ */
+/**************************************************************************************************/
+func (b *base) getSeqIds(c *gin.Context, getNum uint64) ([]uint64, error) {
+	// seqテーブルは必ずmaster
+	isShard, shardId := false, 0
+
+	// validate
+	if getNum < 1 {
+		err := errors.New(fmt.Sprint("invalid getNum : ", getNum))
+		return nil, err
+	}
+
+	// tx get
+	tx, err := db.GetTransaction(c, db.MODE_W, isShard, shardId)
+	if err != nil {
+		return nil, err
+	}
+
+	// table lock
+	seqTableName := seqTablePrefix + b.table
+	_, err = tx.Exec("LOCK TABLES " + seqTableName + " WRITE")
+	if err != nil {
+		log.Error("lock tables error : " + seqTableName)
+		return nil, err
+	}
+
+	// update and select
+	_, err = tx.Exec("UPDATE "+seqTableName+" set id = id + ?", getNum)
+	if err != nil {
+		log.Error("update seq table error : " + seqTableName)
+		return nil, err
+	}
+
+	var seqId uint64
+	err = tx.SelectOne(&seqId, "select max(id) from "+seqTableName)
+	if err != nil {
+		log.Error("seq select error : " + seqTableName)
+		return nil, err
+	}
+
+	// table unlock
+	_, err = tx.Exec("UNLOCK TABLES")
+	if err != nil {
+		log.Error("unlock tables error : " + seqTableName)
+		return nil, err
+	}
+
+	// sedIds生成
+	var seqIds []uint64
+	var i uint64
+	for i = 0; i < getNum; i++ {
+		seqIds = append([]uint64{seqId - i}, seqIds...)
+	}
+
+	return seqIds, err
 }

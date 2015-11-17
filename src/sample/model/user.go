@@ -1,20 +1,31 @@
 package model
 
+/**************************************************************************************************/
+/*!
+ *  user.go
+ *
+ *  table : userのmodelクラス
+ *
+ */
+/**************************************************************************************************/
 import (
+	"time"
+
 	"github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 )
 
 type User struct {
-	Id        uint64 `pk:"true" shard:"true"`
+	Id        uint64 `pk:"t" shard:"t"`
 	Name      string
 	Score     uint
-	CreatedAt uint `db:"created_at"`
-	UpdatedAt uint `db:"updated_at"`
+	CreatedAt time.Time `db:"created_at"`
+	UpdatedAt time.Time `db:"updated_at"`
 }
 
-// user
-/////////////////////////////
+/**
+ * Interface
+ */
 type UserRepo interface {
 	FindByID(*gin.Context, uint64, ...interface{}) (*User, error)
 
@@ -31,15 +42,33 @@ type UserRepo interface {
 	FindsTest(*gin.Context)
 }
 
+/**************************************************************************************************/
+/*!
+ *  リポジトリ操作オブジェクトの生成
+ */
+/**************************************************************************************************/
 func NewUserRepo() UserRepo {
 	b := &base{table: "user"}
 	return UserRepoImpl{b}
 }
 
+/**
+ * Implementer
+ */
 type UserRepoImpl struct {
 	*base
 }
 
+/**************************************************************************************************/
+/*!
+ *  ユーザーIDで検索する
+ *
+ *  \param   c       : コンテキスト
+ *  \param   id      : ユーザーID
+ *  \param   options : オプション
+ *  \return  ユーザーデータ(エラー時はnil)、エラー
+ */
+/**************************************************************************************************/
 func (r UserRepoImpl) FindByID(c *gin.Context, id uint64, options ...interface{}) (*User, error) {
 	var user = new(User)
 	user.Id = id

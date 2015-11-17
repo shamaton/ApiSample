@@ -1,5 +1,13 @@
 package main
 
+/**************************************************************************************************/
+/*!
+ *  main.go
+ *
+ *  アプリエントリポイント
+ *
+ */
+/**************************************************************************************************/
 import (
 	"time"
 
@@ -8,14 +16,14 @@ import (
 
 	log "github.com/cihub/seelog"
 
-	"github.com/BurntSushi/toml"
-	"github.com/garyburd/redigo/redis"
 	"math/rand"
 	"os"
 
+	"github.com/BurntSushi/toml"
+	"github.com/garyburd/redigo/redis"
+
 	"sample/DBI"
 	"sample/conf/gameConf"
-	"sample/controller"
 )
 
 // global
@@ -23,30 +31,71 @@ var (
 	ctx context.Context
 )
 
-// redis ConnectionPooling
-func newPool(gameConf *gameConf.GameConfig) *redis.Pool {
-	// KVSのpoolを取得
-	return &redis.Pool{
+/**************************************************************************************************/
+/*!
+ *  main
+ */
+/**************************************************************************************************/
+func main() {
+	var err error
+	// context
+	ctx = context.Background()
 
-		MaxIdle:     3,
-		IdleTimeout: 240 * time.Second,
+	setLoggerConfig()
 
-		Dial: func() (redis.Conn, error) {
-			c, err := redis.Dial("tcp", gameConf.Kvs.Host+":"+gameConf.Kvs.Port)
+	// game config
+	gameConf := loadGameConfig()
+	ctx = context.WithValue(ctx, "gameConf", gameConf)
 
-			if err != nil {
-				return nil, err
-			}
-			return c, err
-		},
+	// db
+	ctx, err = DBI.BuildInstances(ctx)
+	if err != nil {
+		log.Critical("init DB failed!!")
+		os.Exit(1)
+	}
 
-		TestOnBorrow: func(c redis.Conn, t time.Time) error {
-			_, err := c.Do("PING")
-			return err
-		},
+	// redis
+	redis_pool := newPool(gameConf)
+	ctx = context.WithValue(ctx, "redis", redis_pool)
+
+	router := gin.Default()
+	router.Use(Custom())
+
+	// make route
+	makeRoute(router)
+
+	err = router.Run(":9999")
+
+	// 存在しないルート時
+	if err != nil {
+		log.Critical(err)
 	}
 }
 
+/**************************************************************************************************/
+/*!
+ *  routing
+ */
+/**************************************************************************************************/
+func makeRoute(router *gin.Engine) {
+	// POST
+	for k, v := range routerPostConf {
+		router.POST("/"+k, v)
+	}
+
+	// GET
+	for k, v := range routerGetConf {
+		router.POST("/"+k, v)
+	}
+}
+
+/**************************************************************************************************/
+/*!
+ *  リクエスト毎の処理のカスタム
+ *
+ *  \return  ハンドラ
+ */
+/**************************************************************************************************/
 func Custom() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		t := time.Now()
@@ -73,6 +122,11 @@ func Custom() gin.HandlerFunc {
 	}
 }
 
+/**************************************************************************************************/
+/*!
+ *  loggerの設定
+ */
+/**************************************************************************************************/
 func setLoggerConfig() {
 	// PJ直下で実装した場合
 	logger, err := log.LoggerFromConfigAsFile("./conf/seelog/development.xml")
@@ -85,6 +139,13 @@ func setLoggerConfig() {
 
 }
 
+/**************************************************************************************************/
+/*!
+ *  アプリの設定をロードする
+ *
+ *  \return  gameConfig
+ */
+/**************************************************************************************************/
 func loadGameConfig() *gameConf.GameConfig {
 	var gameConf gameConf.GameConfig
 
@@ -113,41 +174,33 @@ func loadGameConfig() *gameConf.GameConfig {
 	return &gameConf
 }
 
-func main() {
-	var err error
-	// context
-	ctx = context.Background()
+/**************************************************************************************************/
+/*!
+ *  redisのプールを取得
+ *
+ *  \param   gameConf : ゲームの設定
+ *  \return  プール
+ */
+/**************************************************************************************************/
+func newPool(gameConf *gameConf.GameConfig) *redis.Pool {
+	// KVSのpoolを取得
+	return &redis.Pool{
 
-	setLoggerConfig()
+		MaxIdle:     3,
+		IdleTimeout: 240 * time.Second,
 
-	// game config
-	gameConf := loadGameConfig()
-	ctx = context.WithValue(ctx, "gameConf", gameConf)
+		Dial: func() (redis.Conn, error) {
+			c, err := redis.Dial("tcp", gameConf.Kvs.Host+":"+gameConf.Kvs.Port)
 
-	// db
-	ctx, err = DBI.BuildInstances(ctx)
-	if err != nil {
-		log.Critical("init DB failed!!")
-		os.Exit(1)
-	}
+			if err != nil {
+				return nil, err
+			}
+			return c, err
+		},
 
-	// redis
-	redis_pool := newPool(gameConf)
-	ctx = context.WithValue(ctx, "redis", redis_pool)
-
-	router := gin.Default()
-	router.Use(Custom())
-
-	// make route
-	router.POST("/test", controller.Test)
-	router.POST("/token_test", controller.TokenTest)
-
-	router.GET("/shamoto", controller.Shamoto)
-
-	err = router.Run(":9999")
-
-	// 存在しないルート時
-	if err != nil {
-		log.Critical(err)
+		TestOnBorrow: func(c redis.Conn, t time.Time) error {
+			_, err := c.Do("PING")
+			return err
+		},
 	}
 }

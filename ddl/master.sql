@@ -1,3 +1,5 @@
+BEGIN;
+
 -- CREATE DATABASE game_master CHARACTER SET utf8;
 -- GRANT ALL PRIVILEGES ON `game_master`.* TO 'game'@'localhost';
 
@@ -19,7 +21,13 @@ CREATE TABLE `db_table_conf` (
   UNIQUE KEY (`table_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='table conf master';
 
-BEGIN;
+-- sequence table
+DROP TABLE IF EXISTS `seq_user_test_log`;
+CREATE TABLE `seq_user_test_log` (
+  id bigint(20) unsigned NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='sequence table for user_test_log';
+INSERT INTO seq_user_test_log VALUES (0);
+
 INSERT INTO user_shard VALUES (1, 1);
 INSERT INTO user_shard VALUES (2, 2);
 INSERT INTO user_shard VALUES (3, 1);
@@ -27,4 +35,6 @@ INSERT INTO user_shard VALUES (3, 1);
 INSERT INTO db_table_conf VALUES (1, "db_table_conf", 1, 0);
 INSERT INTO db_table_conf VALUES (2, "user_shard", 1, 0);
 INSERT INTO db_table_conf VALUES (3, "user", 2, 1);
+INSERT INTO db_table_conf VALUES (4, "user_test_log", 2, 1);
+
 COMMIT;
