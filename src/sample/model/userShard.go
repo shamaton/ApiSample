@@ -24,18 +24,28 @@ type UserShard struct {
 	ShardId int `db:"shard_id"`
 }
 
-// user shard
-/////////////////////////////
+
+/**
+ * Interface
+ */
 type UserShardRepo interface {
 	FindByUserId(*gin.Context, interface{}, ...interface{}) (*UserShard, error)
 
 	Create(*gin.Context, *UserShard) error
 }
 
+/**************************************************************************************************/
+/*!
+ *  リポジトリ操作オブジェクトの生成
+ */
+/**************************************************************************************************/
 func NewUserShardRepo() UserShardRepo {
 	return UserShardRepoImpl{table: "user_shard"}
 }
 
+/**
+ * Implementer
+ */
 type UserShardRepoImpl struct {
 	table string
 }
