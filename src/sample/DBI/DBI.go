@@ -61,7 +61,7 @@ const (
 func BuildInstances(ctx context.Context) (context.Context, error) {
 	var err error
 
-	gc := ctx.Value("gameConf").(*gameConf.GameConfig)
+	gc := ctx.Value(ckey.GameConfig).(*gameConf.GameConfig)
 
 	// gorpのオブジェクトを取得
 	getGorp := func(dbConf gameConf.DbConfig, host, port, dbName string) (*gorp.DbMap, error) {

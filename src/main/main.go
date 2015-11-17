@@ -46,7 +46,7 @@ func main() {
 
 	// game config
 	gameConf := loadGameConfig()
-	ctx = context.WithValue(ctx, "gameConf", gameConf)
+	ctx = context.WithValue(ctx, ckey.GameConfig, gameConf)
 
 	// db
 	ctx, err = DBI.BuildInstances(ctx)

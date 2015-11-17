@@ -9,7 +9,8 @@ type ContextKey string
 
 const (
 	// context
-	GContext string = "gContext"
+	GContext   string = "gContext"
+	GameConfig        = "gameConfig"
 
 	// memd
 	MemdPool = "redis"
