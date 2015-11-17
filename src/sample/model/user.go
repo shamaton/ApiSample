@@ -15,6 +15,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+/**
+ * \struct User
+ * \brief テーブル定義
+ */
 type User struct {
 	Id        uint64 `pk:"t" shard:"t"`
 	Name      string

@@ -1,10 +1,13 @@
 package model
 
-/**
- * @file userShard.go
- * @brief userShardテーブル操作
+/**************************************************************************************************/
+/*!
+ *  userShard.go
+ *
+ *  table : user_shardのmodelクラス
+ *
  */
-
+/**************************************************************************************************/
 import (
 	"sample/DBI"
 	"sample/cache"
@@ -14,11 +17,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-/**
- *
- */
 
-// table
+/**
+ * \struct UserShard
+ * \brief テーブル定義
+ */
 type UserShard struct {
 	Id      int
 	ShardId int `db:"shard_id"`

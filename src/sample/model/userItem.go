@@ -14,6 +14,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+/**
+ * \struct UserItem
+ * \brief テーブル定義
+ */
 type UserItem struct {
 	UserId    uint64 `db:"user_id" pk:"t" shard:"t"`
 	ItemId    int    `db:"item_id" pk:"t"`

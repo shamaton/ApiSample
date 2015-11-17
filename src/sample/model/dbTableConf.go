@@ -32,8 +32,8 @@ const (
 )
 
 /**
- * @struct DbTableConf
- * @brief テーブル定義
+ * \struct DbTableConf
+ * \brief テーブル定義
  */
 type DbTableConf struct {
 	Id        int
