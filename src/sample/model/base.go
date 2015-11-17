@@ -296,11 +296,9 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
 			// mapに存在するものだけチェックしていく
 			mv, ok := valueMap[column]
 			if ok && mv == value {
-				log.Info(column, " is same!!")
 				delete(valueMap, column)
 				// 空になった時点で更新する必要なし
 				if len(valueMap) < 1 {
-					log.Info("valueMap is empty")
 					return nil
 				}
 			}
