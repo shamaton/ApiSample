@@ -376,6 +376,39 @@ func redisTest(ctx context.Context) {
 	if err != nil {
 		log.Error("error expire ", err)
 	}
+
+	// 全体
+	allrank, _ := redis.Strings(redis_conn.Do("ZREVRANGE", "ranking_test", 0, -1))
+	log.Debug(allrank)
+
+	// スコア
+	score, _ := redis.Int(redis_conn.Do("ZSCORE", "ranking_test", "d"))
+	log.Debug(score)
+
+	// ランク
+	myrank, _ := redis.Int(redis_conn.Do("ZREVRANK", "ranking_test", "d"))
+	log.Debug(myrank)
+
+	// struct -> JSON
+	user := &model.User{Id: 777, Name: "hoge", Score: 123, CreatedAt: time.Now()}
+	serialized, _ := json.Marshal(user)
+	log.Debug("seli -------------------> ", string(serialized))
+
+	// JSON -> struct
+	deserialized := new(model.User)
+	json.Unmarshal(serialized, deserialized)
+	log.Debug("dese -------------------> ", deserialized)
+
+	//
+	jsontest, _ := redis.Bytes(redis_conn.Do("GET", "jsontest"))
+	log.Debug("jsontest ---------> ", jsontest)
+	if jsontest != nil {
+		dejson := new(model.User)
+		json.Unmarshal(serialized, dejson)
+		log.Debug("jsontest ---------> ", dejson)
+	}
+
+	redis_conn.Do("SET", "jsontest", serialized, "EX", 10)
 }
 
 /**************************************************************************************************/
