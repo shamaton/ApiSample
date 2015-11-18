@@ -31,14 +31,14 @@ type User struct {
  * Interface
  */
 type UserRepo interface {
-	Update(*gin.Context, *User, ...interface{}) error
 	Create(*gin.Context, *User) error
 	CreateMulti(*gin.Context, *[]User) error
+	Update(*gin.Context, *User, ...interface{}) error
+	Save(*gin.Context, *User) error
 
 	Delete(*gin.Context, *User) error
 
 	Count(*gin.Context, Condition, ...interface{}) (int64, error)
-	Save(*gin.Context, *User) error
 
 	// test
 	FindById(*gin.Context, uint64, ...interface{}) *User
