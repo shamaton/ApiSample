@@ -377,6 +377,12 @@ func TestUserMisc(c *gin.Context) {
 	redisRepo.Get(c, "test_key4", &cc)
 	log.Debug("cc ---------------> ", cc)
 
+	// exists
+	res, _ := redisRepo.Exists(c, "ranking_test")
+	log.Debug("exists 1 --------------------> ", res)
+	res, _ = redisRepo.Exists(c, "ranking_test", "hoge")
+	log.Debug("exists 2 --------------------> ", res)
+
 	c.JSON(http.StatusOK, gin.H{})
 }
 

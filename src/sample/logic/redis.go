@@ -92,6 +92,31 @@ func (this *redisRepo) Get(c *gin.Context, key string, holder interface{}) error
 	return nil
 }
 
+// 全て存在する場合はtrue
+func (this *redisRepo) Exists(c *gin.Context, key string, keys ...string) (bool, error) {
+	conn := this.getConnection(c)
+
+	// keys...で渡せないのでinterfaceに入れなおす
+	var is []interface{}
+	is = append(is, key)
+	for _, k := range keys {
+		is = append(is, k)
+	}
+
+	// exec redis
+	v, err := redis.Int(conn.Do("EXISTS", is...))
+	if err != nil {
+		return false, err
+	}
+
+	// 返り値と比較
+	var isExists bool
+	if v == len(is) {
+		isExists = true
+	}
+	return isExists, nil
+}
+
 func (this *redisRepo) getConnection(c *gin.Context) redis.Conn {
 	ctx := c.MustGet(ckey.GContext).(context.Context)
 	pool := ctx.Value(ckey.MemdPool).(*redis.Pool)
