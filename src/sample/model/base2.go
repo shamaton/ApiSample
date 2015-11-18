@@ -24,29 +24,49 @@ import (
 )
 
 // 一旦ここに
+/*
 type Option map[string]interface{}
 type Condition map[string]interface{}
 type WhereCondition [][]interface{}
 type OrderByCondition [][]string
 type In []interface{}
-
+*/
 /**
  * INSERT UPDATE系で除外するカラム
  */
+/*
 const (
 	createdAt = "created_at"
 	updatedAt = "updated_at"
 )
+*/
 
 /**
  * sequence tableのprefix
  */
-const seqTablePrefix = "seq_"
+//const seqTablePrefix = "seq_"
 
 // base
 //////////////////////////////
+type Base interface {
+	Find(*gin.Context, interface{}, ...interface{}) error
+	Finds(*gin.Context, interface{}, Condition, ...interface{}) error
 
-type base struct {
+	Update(*gin.Context, interface{}, ...interface{}) error
+	Create(*gin.Context, interface{}) error
+	CreateMulti(*gin.Context, interface{}) error
+
+	Delete(*gin.Context, interface{}) error
+
+	Count(*gin.Context, map[string]interface{}, ...interface{}) (int64, error)
+	Save(*gin.Context, interface{}) error
+}
+
+func NewBase(tableName string) Base {
+	return &base2{table: tableName}
+}
+
+type base2 struct {
 	table string //<! テーブル名
 }
 
@@ -65,7 +85,7 @@ type base struct {
  *  \return  エラー（正常時はholderにデータを取得する）
  */
 /**************************************************************************************************/
-func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) error {
+func (b *base2) Find(c *gin.Context, holder interface{}, options ...interface{}) error {
 
 	// optionsの解析
 	mode, isForUpdate, _, _, err := b.optionCheck(options...)
@@ -128,7 +148,7 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
  *  \return  エラー（正常時はholdersにデータを取得する）
  */
 /**************************************************************************************************/
-func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]interface{}, options ...interface{}) error {
+func (b *base2) Finds(c *gin.Context, holders interface{}, condition Condition, options ...interface{}) error {
 
 	wSql, wArgs, orders, err := b.conditionCheck(condition)
 	if err != nil {
@@ -236,7 +256,7 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]i
  *  \return  where文, where引数、orderBy用配列、エラー
  */
 /**************************************************************************************************/
-func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interface{}) error {
+func (b *base2) Update(c *gin.Context, holder interface{}, prevHolders ...interface{}) error {
 	var err error
 
 	// 過去データは1つしか想定してない
@@ -330,7 +350,7 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
  *  \return  処理失敗時エラー
  */
 /**************************************************************************************************/
-func (b *base) Create(c *gin.Context, holder interface{}) error {
+func (b *base2) Create(c *gin.Context, holder interface{}) error {
 
 	var err error
 
@@ -399,7 +419,7 @@ func (b *base) Create(c *gin.Context, holder interface{}) error {
  *  \return  カラム、pk以外の値、pkのマップ、shard検索キー、エラー
  */
 /**************************************************************************************************/
-func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
+func (b *base2) CreateMulti(c *gin.Context, holders interface{}) error {
 	var err error
 
 	// 参照渡しかチェック
@@ -510,7 +530,7 @@ func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
  *  \return  失敗時エラー
  */
 /**************************************************************************************************/
-func (b *base) Delete(c *gin.Context, holder interface{}) error {
+func (b *base2) Delete(c *gin.Context, holder interface{}) error {
 
 	var err error
 
@@ -565,7 +585,7 @@ func (b *base) Delete(c *gin.Context, holder interface{}) error {
  */
 /**************************************************************************************************/
 // TODO : createと共通化
-func (b *base) Save(c *gin.Context, holder interface{}) error {
+func (b *base2) Save(c *gin.Context, holder interface{}) error {
 	var err error
 
 	// db_table_confから属性を把握
@@ -643,7 +663,7 @@ func (b *base) Save(c *gin.Context, holder interface{}) error {
  *  \return  失敗時エラー
  */
 /**************************************************************************************************/
-func (b *base) Count(c *gin.Context, condition map[string]interface{}, options ...interface{}) (int64, error) {
+func (b *base2) Count(c *gin.Context, condition map[string]interface{}, options ...interface{}) (int64, error) {
 	var count int64
 	var err error
 
@@ -706,7 +726,7 @@ func (b *base) Count(c *gin.Context, condition map[string]interface{}, options .
  *  \return  カラム、pk以外の値、pkのマップ、shard検索キー、エラー
  */
 /**************************************************************************************************/
-func (b *base) getTableInfoFromStructData(c *gin.Context, holder interface{}, dbTableConf *DbTableConf, isINSorUPD bool) ([]string, map[string]interface{}, builder.Eq, interface{}, error) {
+func (b *base2) getTableInfoFromStructData(c *gin.Context, holder interface{}, dbTableConf *DbTableConf, isINSorUPD bool) ([]string, map[string]interface{}, builder.Eq, interface{}, error) {
 	var err error
 
 	var columns []string
@@ -793,7 +813,7 @@ func (b *base) getTableInfoFromStructData(c *gin.Context, holder interface{}, db
  *  \return  カラム、pk以外の値、pkのマップ、shard検索キー、エラー
  */
 /**************************************************************************************************/
-func (b *base) getShardIdByShardKey(c *gin.Context, shardKey interface{}, dbTableConf *DbTableConf) (int, error) {
+func (b *base2) getShardIdByShardKey(c *gin.Context, shardKey interface{}, dbTableConf *DbTableConf) (int, error) {
 	var err error
 	var shardId int
 
@@ -824,7 +844,7 @@ func (b *base) getShardIdByShardKey(c *gin.Context, shardKey interface{}, dbTabl
  *  \return  where文, where引数、orderBy用配列、エラー
  */
 /**************************************************************************************************/
-func (b *base) conditionCheck(condition map[string]interface{}) (string, []interface{}, []string, error) {
+func (b *base2) conditionCheck(condition map[string]interface{}) (string, []interface{}, []string, error) {
 	var err error
 	var whereSql string
 	var whereArgs []interface{}
@@ -875,10 +895,10 @@ func (b *base) conditionCheck(condition map[string]interface{}) (string, []inter
  *  \return  where文, where引数、エラー
  */
 /**************************************************************************************************/
-const whereConditionMin = 3 //<! whereConditionの最小長
-const whereConditionMax = 4 //<! whereConditionの最大長
+//const whereConditionMin = 3 //<! whereConditionの最小長
+//const whereConditionMax = 4 //<! whereConditionの最大長
 
-func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) {
+func (b *base2) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) {
 	var err error
 	var pred string
 	var args []interface{}
@@ -992,9 +1012,9 @@ func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) 
  *  \return  orderBy用配列、エラー
  */
 /**************************************************************************************************/
-const orderCondition = 2 //<! orderConditionの長さ
+//const orderCondition = 2 //<! orderConditionの長さ
 
-func (b *base) orderSyntaxAnalyze(i interface{}) ([]string, error) {
+func (b *base2) orderSyntaxAnalyze(i interface{}) ([]string, error) {
 	var err error
 	var orders []string
 
@@ -1031,7 +1051,7 @@ func (b *base) orderSyntaxAnalyze(i interface{}) ([]string, error) {
  *  \return  モード、ロックするか、エラー
  */
 /**************************************************************************************************/
-func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, int, error) {
+func (b *base2) optionCheck(options ...interface{}) (string, bool, interface{}, int, error) {
 	var err error
 
 	var mode = db.MODE_R
@@ -1115,7 +1135,7 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
  *  \return  シーケンスID、エラー
  */
 /**************************************************************************************************/
-func (b *base) getSeqId(c *gin.Context) (uint64, error) {
+func (b *base2) getSeqId(c *gin.Context) (uint64, error) {
 	seqIds, err := b.getSeqIds(c, 1)
 	if err != nil {
 		return 0, err
@@ -1134,7 +1154,7 @@ func (b *base) getSeqId(c *gin.Context) (uint64, error) {
  *  \return  シーケンスID、エラー
  */
 /**************************************************************************************************/
-func (b *base) getSeqIds(c *gin.Context, getNum uint64) ([]uint64, error) {
+func (b *base2) getSeqIds(c *gin.Context, getNum uint64) ([]uint64, error) {
 	// seqテーブルは必ずmaster
 	isShard, shardId := false, 0
 

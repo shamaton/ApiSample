@@ -53,13 +53,13 @@ type UserRepo interface {
 /**************************************************************************************************/
 func NewUserRepo() UserRepo {
 	b := &base{table: "user"}
-	return UserRepoImpl{b}
+	return userRepo{b}
 }
 
 /**
  * Implementer
  */
-type UserRepoImpl struct {
+type userRepo struct {
 	*base
 }
 
@@ -73,17 +73,17 @@ type UserRepoImpl struct {
  *  \return  ユーザーデータ(エラー時はnil)
  */
 /**************************************************************************************************/
-func (r UserRepoImpl) FindById(c *gin.Context, id uint64, options ...interface{}) *User {
+func (r userRepo) FindById(c *gin.Context, id uint64, options ...interface{}) *User {
 	var user = new(User)
 	user.Id = id
-	err := r.Find(c, user, options...)
+	err := r.base.Find(c, user, options...)
 	if err != nil {
 		return nil
 	}
 	return user
 }
 
-func (r UserRepoImpl) FindsTest(c *gin.Context) {
+func (r userRepo) FindsTest(c *gin.Context) {
 	var users []User
 
 	whereCond := WhereCondition{
@@ -106,4 +106,11 @@ func (r UserRepoImpl) FindsTest(c *gin.Context) {
 	var hoges []User
 	r.Finds(c, &hoges, Condition{}, option)
 	seelog.Debug(&hoges)
+}
+
+func (r userRepo) Find(c *gin.Context, id uint64, options ...interface{}) *User {
+	var user = new(User)
+	user.Id = id
+	r.base.Find(c, user, options...)
+	return user
 }

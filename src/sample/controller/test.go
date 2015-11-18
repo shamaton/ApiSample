@@ -15,6 +15,8 @@ import (
 
 	"time"
 
+	"sample/logic"
+
 	log "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
@@ -408,12 +410,10 @@ func redisTest(ctx context.Context) {
 		log.Debug("jsontest ---------> ", dejson)
 	}
 
-	redis_conn.Do("SET", "jsontest", serialized, "EX", 100)
-	if jsontest != nil {
-		dejson := new(model.User)
-		json.Unmarshal(serialized, dejson)
-		log.Debug("jsontest ---------> ", dejson)
-	}
+	redis_conn.Do("SET", "jsontest", serialized, "EX", 10)
+
+	redisRepo := logic.NewRedisRepo()
+	redisRepo.Get()
 }
 
 /**************************************************************************************************/

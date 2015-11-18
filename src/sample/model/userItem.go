@@ -44,7 +44,7 @@ type UserItemRepo interface {
 /**************************************************************************************************/
 func NewUserItemRepo() UserItemRepo {
 	b := &base{table: "user_item"}
-	return UserRepoImpl{b}
+	return UserItemRepoImpl{b}
 }
 
 /**
@@ -65,7 +65,7 @@ type UserItemRepoImpl struct {
  *  \return  ユーザーアイテムデータ(エラー時はnil)
  */
 /**************************************************************************************************/
-func (r UserRepoImpl) FindByPk(c *gin.Context, userId uint64, itemId int, options ...interface{}) *UserItem {
+func (r UserItemRepoImpl) FindByPk(c *gin.Context, userId uint64, itemId int, options ...interface{}) *UserItem {
 	userItem := &UserItem{UserId: userId, ItemId: itemId}
 	err := r.Find(c, userItem, options...)
 	if err != nil {
