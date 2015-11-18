@@ -408,7 +408,12 @@ func redisTest(ctx context.Context) {
 		log.Debug("jsontest ---------> ", dejson)
 	}
 
-	redis_conn.Do("SET", "jsontest", serialized, "EX", 10)
+	redis_conn.Do("SET", "jsontest", serialized, "EX", 100)
+	if jsontest != nil {
+		dejson := new(model.User)
+		json.Unmarshal(serialized, dejson)
+		log.Debug("jsontest ---------> ", dejson)
+	}
 }
 
 /**************************************************************************************************/
