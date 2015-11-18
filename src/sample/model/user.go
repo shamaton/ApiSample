@@ -30,7 +30,7 @@ type User struct {
 /**
  * Interface
  */
-type UserRepo interface {
+type userRepoI interface {
 	Create(*gin.Context, *User) error
 	CreateMulti(*gin.Context, *[]User) error
 	Update(*gin.Context, *User, ...interface{}) error
@@ -50,7 +50,7 @@ type UserRepo interface {
  *  リポジトリ操作オブジェクトの生成
  */
 /**************************************************************************************************/
-func NewUserRepo() UserRepo {
+func NewUserRepo() userRepoI {
 	b := NewBase("user")
 	return &userRepo{base: b}
 }
@@ -59,7 +59,7 @@ func NewUserRepo() UserRepo {
  * Implementer
  */
 type userRepo struct {
-	base Base
+	base baseI
 }
 
 /**************************************************************************************************/
@@ -82,7 +82,7 @@ func (r *userRepo) FindById(c *gin.Context, id uint64, options ...interface{}) *
 	return user
 }
 
-func (r *userRepo) FindsTest(c *gin.Context) {
+func (this *userRepo) FindsTest(c *gin.Context) {
 	var users []User
 
 	whereCond := WhereCondition{
@@ -99,11 +99,11 @@ func (r *userRepo) FindsTest(c *gin.Context) {
 
 	var option = Option{"shard_id": 1}
 
-	r.base.Finds(c, &users, condition, option)
+	this.base.Finds(c, &users, condition, option)
 	seelog.Debug(&users)
 
 	var hoges []User
-	r.base.Finds(c, &hoges, Condition{}, option)
+	this.base.Finds(c, &hoges, Condition{}, option)
 	seelog.Debug(&hoges)
 }
 
