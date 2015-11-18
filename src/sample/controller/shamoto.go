@@ -18,7 +18,7 @@ func Shamoto(c *gin.Context) {
 
 	option := model.Option{"for_update": 1}
 	userRepo := model.NewUserRepo()
-	user, _ := userRepo.FindByID(c, 3, option)
+	user := userRepo.FindById(c, 3, option)
 
 	// unixtimeに変換
 	log.Debug(time.Now())

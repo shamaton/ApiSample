@@ -1,7 +1,5 @@
 package context
 
-import ()
-
 /**
  * コンテキストで一意にするためのキー
  */
@@ -11,7 +9,8 @@ type ContextKey string
 
 const (
 	// context
-	GContext ContextKey = "gContext"
+	GContext   string = "gContext"
+	GameConfig        = "gameConfig"
 
 	// memd
 	MemdPool = "redis"

@@ -61,7 +61,7 @@ const (
 func BuildInstances(ctx context.Context) (context.Context, error) {
 	var err error
 
-	gc := ctx.Value("gameConf").(*gameConf.GameConfig)
+	gc := ctx.Value(ckey.GameConfig).(*gameConf.GameConfig)
 
 	// gorpのオブジェクトを取得
 	getGorp := func(dbConf gameConf.DbConfig, host, port, dbName string) (*gorp.DbMap, error) {
@@ -234,7 +234,6 @@ func MasterTxStart(c *gin.Context, mode string) error {
 	if err != nil {
 		return err
 	}
-	log.Debug(mode, " master start tx!! ")
 
 	// リクエストコンテキストに保存
 	c.Set(txKey, tx)
@@ -280,7 +279,6 @@ func ShardAllTxStart(c *gin.Context, mode string) error {
 			return err
 		}
 		txMap[k] = tx
-		log.Debug(mode, " shard start tx!! ", k)
 	}
 
 	// リクエストコンテキストに保存
@@ -325,7 +323,6 @@ func masterCommit(c *gin.Context) error {
 	if valid && iFace != nil {
 		tx := iFace.(*gorp.Transaction)
 		err = tx.Commit()
-		log.Debug(" master commit ")
 
 		// エラーじゃなければ削除
 		if err == nil {
@@ -354,7 +351,6 @@ func shardCommit(c *gin.Context) error {
 		// 取得してすべてcommitする
 		txMap := iFace.(map[int]*gorp.Transaction)
 		for k, v := range txMap {
-			log.Debug(k, " shard commit!!")
 			err = v.Commit()
 			// 正常な場合、削除する
 			if err == nil {
@@ -412,7 +408,6 @@ func masterRollback(c *gin.Context, mode string) error {
 	if valid && iFace != nil {
 		tx := iFace.(*gorp.Transaction)
 		err = tx.Rollback()
-		log.Debug(mode, " master rollback ")
 
 		// エラーじゃなければ削除
 		if err == nil {
@@ -447,7 +442,6 @@ func shardRollback(c *gin.Context, mode string) error {
 		// 取得してすべてrollbackする
 		txMap := iFace.(map[int]*gorp.Transaction)
 		for k, v := range txMap {
-			log.Debug(k, " rollback!! ", mode)
 			err = v.Rollback()
 			// 正常な場合、削除する
 			if err == nil {
@@ -606,7 +600,7 @@ func GetDBMasterConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
 	var conn *gorp.DbMap
 	var err error
 
-	gc := c.Value("globalContext").(context.Context)
+	gc := c.Value(ckey.GContext).(context.Context)
 
 	switch mode {
 	case MODE_W:
@@ -668,7 +662,7 @@ func GetDBShardMap(c *gin.Context, mode string) (map[int]*gorp.DbMap, error) {
 	var err error
 	var shardMap map[int]*gorp.DbMap
 
-	gc := c.Value("globalContext").(context.Context)
+	gc := c.Value(ckey.GContext).(context.Context)
 
 	switch mode {
 	case MODE_W:

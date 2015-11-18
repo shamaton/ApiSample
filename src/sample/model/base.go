@@ -296,11 +296,9 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
 			// mapに存在するものだけチェックしていく
 			mv, ok := valueMap[column]
 			if ok && mv == value {
-				log.Info(column, " is same!!")
 				delete(valueMap, column)
 				// 空になった時点で更新する必要なし
 				if len(valueMap) < 1 {
-					log.Info("valueMap is empty")
 					return nil
 				}
 			}
@@ -604,25 +602,29 @@ func (b *base) Save(c *gin.Context, holder interface{}) error {
 
 	// values収集
 	var values []interface{}
+	var dupCols []string
+	var dupValues []interface{}
+
+	// NOTE : マップで回すとカラムの順序がおかしくなる
 	for _, column := range columns {
 		if v, ok := pkMap[column]; ok {
 			values = append(values, v)
 		} else if v, ok := valueMap[column]; ok {
 			values = append(values, v)
+			dupCols = append(dupCols, column+" = ?")
+			dupValues = append(dupValues, v)
 		} else {
 			return errors.New("unknown column found!!")
 		}
 	}
 
-	pkSql, pkArgs, err := pkMap.ToSql()
-	if err != nil {
-		return err
-	}
-	suffix := strings.Join([]string{"ON DUPLICATE KEY UPDATE", pkSql}, " ")
+	// DUPLICATE文作成
+	dupStr := strings.Join(dupCols, ", ")
+	suffix := strings.Join([]string{"ON DUPLICATE KEY UPDATE", dupStr}, " ")
 
 	// SQL生成
 	columnStr := strings.Join(columns, ",")
-	sql, args, err := builder.Insert(b.table).Columns(columnStr).Values(values...).Suffix(suffix, pkArgs...).ToSql()
+	sql, args, err := builder.Insert(b.table).Columns(columnStr).Values(values...).Suffix(suffix, dupValues...).ToSql()
 	if err != nil {
 		log.Error("sql maker error!!")
 		return err

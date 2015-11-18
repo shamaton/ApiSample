@@ -11,6 +11,19 @@ CREATE TABLE `user` (
   PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
+
+DROP TABLE IF EXISTS user_item;
+CREATE TABLE `user_item` (
+  user_id bigint(20) unsigned NOT NULL,
+  item_id int(11) unsigned NOT NULL,
+  num int(11) unsigned NOT NULL,
+  used_num int(11) unsigned NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`user_id`, `item_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+
 DROP TABLE IF EXISTS user_test_log;
 CREATE TABLE `user_test_log` (
   id bigint(20) unsigned NOT NULL,

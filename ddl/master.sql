@@ -35,6 +35,7 @@ INSERT INTO user_shard VALUES (3, 1);
 INSERT INTO db_table_conf VALUES (1, "db_table_conf", 1, 0);
 INSERT INTO db_table_conf VALUES (2, "user_shard", 1, 0);
 INSERT INTO db_table_conf VALUES (3, "user", 2, 1);
-INSERT INTO db_table_conf VALUES (4, "user_test_log", 2, 1);
+INSERT INTO db_table_conf VALUES (4, "user_item", 2, 1);
+INSERT INTO db_table_conf VALUES (5, "user_test_log", 2, 1);
 
 COMMIT;
