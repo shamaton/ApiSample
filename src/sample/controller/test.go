@@ -353,6 +353,30 @@ func TestUserMisc(c *gin.Context) {
 	// MEMD TEST
 	redisTest(ctx)
 
+	redisRepo := logic.NewRedisRepo()
+	redisRepo.Set(c, "test_key", 777)
+	redisRepo.Set(c, "test_key2", 1234)
+	redisRepo.Set(c, "test_key3", "logic test")
+
+	user := &model.User{Id: 777, Name: "hoge", Score: 123, CreatedAt: time.Now()}
+	redisRepo.Set(c, "test_key4", user)
+
+	var hoge int
+	redisRepo.Get(c, "test_key", &hoge)
+	log.Debug("hoge ---------------> ", hoge)
+
+	var a uint16
+	redisRepo.Get(c, "test_key2", &a)
+	log.Debug("a ---------------> ", a)
+
+	var b string
+	redisRepo.Get(c, "test_key3", &b)
+	log.Debug("b ---------------> ", b)
+
+	var cc model.User
+	redisRepo.Get(c, "test_key4", &cc)
+	log.Debug("cc ---------------> ", cc)
+
 	c.JSON(http.StatusOK, gin.H{})
 }
 
@@ -411,9 +435,6 @@ func redisTest(ctx context.Context) {
 	}
 
 	redis_conn.Do("SET", "jsontest", serialized, "EX", 10)
-
-	redisRepo := logic.NewRedisRepo()
-	redisRepo.Get()
 }
 
 /**************************************************************************************************/
