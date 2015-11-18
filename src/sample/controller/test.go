@@ -127,7 +127,7 @@ func TestUserCreate(c *gin.Context) {
 	// CREATE
 	userRepo := model.NewUserRepo()
 
-	newUser := model.User{Id: userId, Name: json.Name}
+	newUser := &model.User{Id: userId, Name: json.Name}
 	err = userRepo.Create(c, newUser)
 	if err != nil {
 		errorJson(c, "user create error ", err)

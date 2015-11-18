@@ -56,7 +56,7 @@ type Base interface {
 
 	Delete(*gin.Context, interface{}) error
 
-	Count(*gin.Context, map[string]interface{}, ...interface{}) (int64, error)
+	Count(*gin.Context, Condition, ...interface{}) (int64, error)
 	Save(*gin.Context, interface{}) error
 }
 
@@ -669,7 +669,7 @@ func (b *base) Save(c *gin.Context, holder interface{}) error {
  *  \return  失敗時エラー
  */
 /**************************************************************************************************/
-func (b *base) Count(c *gin.Context, condition map[string]interface{}, options ...interface{}) (int64, error) {
+func (b *base) Count(c *gin.Context, condition Condition, options ...interface{}) (int64, error) {
 	var count int64
 	var err error
 
