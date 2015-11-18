@@ -15,6 +15,8 @@ import (
 
 	"time"
 
+	"sample/logic"
+
 	log "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
@@ -125,7 +127,7 @@ func TestUserCreate(c *gin.Context) {
 	// CREATE
 	userRepo := model.NewUserRepo()
 
-	newUser := model.User{Id: userId, Name: json.Name}
+	newUser := &model.User{Id: userId, Name: json.Name}
 	err = userRepo.Create(c, newUser)
 	if err != nil {
 		errorJson(c, "user create error ", err)
@@ -351,6 +353,36 @@ func TestUserMisc(c *gin.Context) {
 	// MEMD TEST
 	redisTest(ctx)
 
+	redisRepo := logic.NewRedisRepo()
+	redisRepo.Set(c, "test_key", 777)
+	redisRepo.Set(c, "test_key2", 1234)
+	redisRepo.Set(c, "test_key3", "logic test")
+
+	user := &model.User{Id: 777, Name: "hoge", Score: 123, CreatedAt: time.Now()}
+	redisRepo.Set(c, "test_key4", user)
+
+	var hoge int
+	redisRepo.Get(c, "test_key", &hoge)
+	log.Debug("hoge ---------------> ", hoge)
+
+	var a uint16
+	redisRepo.Get(c, "test_key2", &a)
+	log.Debug("a ---------------> ", a)
+
+	var b string
+	redisRepo.Get(c, "test_key3", &b)
+	log.Debug("b ---------------> ", b)
+
+	var cc model.User
+	redisRepo.Get(c, "test_key4", &cc)
+	log.Debug("cc ---------------> ", cc)
+
+	// exists
+	res, _ := redisRepo.Exists(c, "ranking_test")
+	log.Debug("exists 1 --------------------> ", res)
+	res, _ = redisRepo.Exists(c, "ranking_test", "hoge")
+	log.Debug("exists 2 --------------------> ", res)
+
 	c.JSON(http.StatusOK, gin.H{})
 }
 
@@ -376,6 +408,39 @@ func redisTest(ctx context.Context) {
 	if err != nil {
 		log.Error("error expire ", err)
 	}
+
+	// 全体
+	allrank, _ := redis.Strings(redis_conn.Do("ZREVRANGE", "ranking_test", 0, -1))
+	log.Debug(allrank)
+
+	// スコア
+	score, _ := redis.Int(redis_conn.Do("ZSCORE", "ranking_test", "d"))
+	log.Debug(score)
+
+	// ランク
+	myrank, _ := redis.Int(redis_conn.Do("ZREVRANK", "ranking_test", "d"))
+	log.Debug(myrank)
+
+	// struct -> JSON
+	user := &model.User{Id: 777, Name: "hoge", Score: 123, CreatedAt: time.Now()}
+	serialized, _ := json.Marshal(user)
+	log.Debug("seli -------------------> ", string(serialized))
+
+	// JSON -> struct
+	deserialized := new(model.User)
+	json.Unmarshal(serialized, deserialized)
+	log.Debug("dese -------------------> ", deserialized)
+
+	//
+	jsontest, _ := redis.Bytes(redis_conn.Do("GET", "jsontest"))
+	log.Debug("jsontest ---------> ", jsontest)
+	if jsontest != nil {
+		dejson := new(model.User)
+		json.Unmarshal(serialized, dejson)
+		log.Debug("jsontest ---------> ", dejson)
+	}
+
+	redis_conn.Do("SET", "jsontest", serialized, "EX", 10)
 }
 
 /**************************************************************************************************/

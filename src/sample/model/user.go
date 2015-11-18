@@ -30,19 +30,18 @@ type User struct {
 /**
  * Interface
  */
-type UserRepo interface {
-	FindById(*gin.Context, uint64, ...interface{}) *User
+type userRepoI interface {
+	Create(*gin.Context, *User) error
+	CreateMulti(*gin.Context, *[]User) error
+	Update(*gin.Context, *User, ...interface{}) error
+	Save(*gin.Context, *User) error
 
-	Update(*gin.Context, interface{}, ...interface{}) error
-	Create(*gin.Context, interface{}) error
-	CreateMulti(*gin.Context, interface{}) error
+	Delete(*gin.Context, *User) error
 
-	Delete(*gin.Context, interface{}) error
-
-	Count(*gin.Context, map[string]interface{}, ...interface{}) (int64, error)
-	Save(*gin.Context, interface{}) error
+	Count(*gin.Context, Condition, ...interface{}) (int64, error)
 
 	// test
+	FindById(*gin.Context, uint64, ...interface{}) *User
 	FindsTest(*gin.Context)
 }
 
@@ -51,16 +50,16 @@ type UserRepo interface {
  *  リポジトリ操作オブジェクトの生成
  */
 /**************************************************************************************************/
-func NewUserRepo() UserRepo {
-	b := &base{table: "user"}
-	return UserRepoImpl{b}
+func NewUserRepo() userRepoI {
+	b := NewBase("user")
+	return &userRepo{base: b}
 }
 
 /**
  * Implementer
  */
-type UserRepoImpl struct {
-	*base
+type userRepo struct {
+	base baseI
 }
 
 /**************************************************************************************************/
@@ -73,17 +72,17 @@ type UserRepoImpl struct {
  *  \return  ユーザーデータ(エラー時はnil)
  */
 /**************************************************************************************************/
-func (r UserRepoImpl) FindById(c *gin.Context, id uint64, options ...interface{}) *User {
+func (r *userRepo) FindById(c *gin.Context, id uint64, options ...interface{}) *User {
 	var user = new(User)
 	user.Id = id
-	err := r.Find(c, user, options...)
+	err := r.base.Find(c, user, options...)
 	if err != nil {
 		return nil
 	}
 	return user
 }
 
-func (r UserRepoImpl) FindsTest(c *gin.Context) {
+func (this *userRepo) FindsTest(c *gin.Context) {
 	var users []User
 
 	whereCond := WhereCondition{
@@ -100,10 +99,39 @@ func (r UserRepoImpl) FindsTest(c *gin.Context) {
 
 	var option = Option{"shard_id": 1}
 
-	r.Finds(c, &users, condition, option)
+	this.base.Finds(c, &users, condition, option)
 	seelog.Debug(&users)
 
 	var hoges []User
-	r.Finds(c, &hoges, Condition{}, option)
+	this.base.Finds(c, &hoges, Condition{}, option)
 	seelog.Debug(&hoges)
+}
+
+/**************************************************************************************************/
+/*!
+ *  以下、基本メソッド
+ */
+/**************************************************************************************************/
+func (this *userRepo) Create(c *gin.Context, user *User) error {
+	return this.base.Create(c, user)
+}
+
+func (this *userRepo) Delete(c *gin.Context, user *User) error {
+	return this.base.Delete(c, user)
+}
+
+func (this *userRepo) CreateMulti(c *gin.Context, users *[]User) error {
+	return this.base.CreateMulti(c, users)
+}
+
+func (this *userRepo) Save(c *gin.Context, user *User) error {
+	return this.base.Save(c, user)
+}
+
+func (this *userRepo) Update(c *gin.Context, user *User, prev ...interface{}) error {
+	return this.base.Update(c, user, prev...)
+}
+
+func (this *userRepo) Count(c *gin.Context, condition Condition, options ...interface{}) (int64, error) {
+	return this.base.Count(c, condition, options...)
 }

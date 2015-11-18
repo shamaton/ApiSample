@@ -43,9 +43,10 @@ const (
  */
 const seqTablePrefix = "seq_"
 
-// base
-//////////////////////////////
-type Base interface {
+/**
+ * interface
+ */
+type baseI interface {
 	Find(*gin.Context, interface{}, ...interface{}) error
 	Finds(*gin.Context, interface{}, Condition, ...interface{}) error
 
@@ -55,10 +56,22 @@ type Base interface {
 
 	Delete(*gin.Context, interface{}) error
 
-	Count(*gin.Context, map[string]interface{}, ...interface{}) (int64, error)
+	Count(*gin.Context, Condition, ...interface{}) (int64, error)
 	Save(*gin.Context, interface{}) error
 }
 
+/**************************************************************************************************/
+/*!
+ *  リポジトリ操作オブジェクトの生成
+ */
+/**************************************************************************************************/
+func NewBase(tableName string) baseI {
+	return &base{table: tableName}
+}
+
+/**
+ * entity
+ */
 type base struct {
 	table string //<! テーブル名
 }
@@ -141,7 +154,7 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
  *  \return  エラー（正常時はholdersにデータを取得する）
  */
 /**************************************************************************************************/
-func (b *base) Finds(c *gin.Context, holders interface{}, condition map[string]interface{}, options ...interface{}) error {
+func (b *base) Finds(c *gin.Context, holders interface{}, condition Condition, options ...interface{}) error {
 
 	wSql, wArgs, orders, err := b.conditionCheck(condition)
 	if err != nil {
@@ -656,7 +669,7 @@ func (b *base) Save(c *gin.Context, holder interface{}) error {
  *  \return  失敗時エラー
  */
 /**************************************************************************************************/
-func (b *base) Count(c *gin.Context, condition map[string]interface{}, options ...interface{}) (int64, error) {
+func (b *base) Count(c *gin.Context, condition Condition, options ...interface{}) (int64, error) {
 	var count int64
 	var err error
 
