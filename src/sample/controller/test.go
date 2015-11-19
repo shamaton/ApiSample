@@ -356,8 +356,6 @@ func TestUserMisc(c *gin.Context) {
 		log.Debug(str, " ---------------> ", param)
 	}
 
-	// MEMD TEST
-	redisTest(ctx)
 
 	redisRepo := logic.NewRedisRepo()
 	redisRepo.Set(c, "test_key", 777)
@@ -404,67 +402,20 @@ func TestUserMisc(c *gin.Context) {
 	res, _ = redisRepo.ExpireAt(c, "_expire_at_test", expire_at)
 	l("_expire_at_test", res)
 
+	// ranking
+	score, _ := redisRepo.ZScore(c, "ranking_test", "c")
+	l("ranking score", score)
+	rank, _ := redisRepo.ZRevRank(c, "ranking_test", "c")
+	l("now rank is", rank)
+	ranking, _ := redisRepo.ZRevRange(c, "ranking_test", rank-1, rank+1)
+	l("ranking", ranking)
+	allranking, _ := redisRepo.ZRevRangeAll(c, "ranking_test")
+	l("ranking_all", allranking)
+
 	dir, _ := os.Getwd()
 	log.Debug("path : ", dir)
 
 	c.JSON(http.StatusOK, gin.H{})
-}
-
-func redisTest(ctx context.Context) {
-
-	redis_pool := ctx.Value(ckey.MemdPool).(*redis.Pool)
-	redis_conn := redis_pool.Get()
-
-	var err error
-	s, err := redis.String(redis_conn.Do("GET", "message"))
-	if err != nil {
-		log.Error("get message not found...", err)
-	} else {
-		log.Info(s)
-	}
-
-	_, err = redis_conn.Do("SET", "message", "this is value")
-	if err != nil {
-		log.Error("set message", err)
-	}
-	_, err = redis_conn.Do("EXPIRE", "message", 10)
-
-	if err != nil {
-		log.Error("error expire ", err)
-	}
-
-	// 全体
-	allrank, _ := redis.Strings(redis_conn.Do("ZREVRANGE", "ranking_test", 0, -1))
-	log.Debug(allrank)
-
-	// スコア
-	score, _ := redis.Int(redis_conn.Do("ZSCORE", "ranking_test", "d"))
-	log.Debug(score)
-
-	// ランク
-	myrank, _ := redis.Int(redis_conn.Do("ZREVRANK", "ranking_test", "d"))
-	log.Debug(myrank)
-
-	// struct -> JSON
-	user := &model.User{Id: 777, Name: "hoge", Score: 123, CreatedAt: time.Now()}
-	serialized, _ := json.Marshal(user)
-	log.Debug("seli -------------------> ", string(serialized))
-
-	// JSON -> struct
-	deserialized := new(model.User)
-	json.Unmarshal(serialized, deserialized)
-	log.Debug("dese -------------------> ", deserialized)
-
-	//
-	jsontest, _ := redis.Bytes(redis_conn.Do("GET", "jsontest"))
-	log.Debug("jsontest ---------> ", jsontest)
-	if jsontest != nil {
-		dejson := new(model.User)
-		json.Unmarshal(serialized, dejson)
-		log.Debug("jsontest ---------> ", dejson)
-	}
-
-	redis_conn.Do("SET", "jsontest", serialized, "EX", 10)
 }
 
 /**************************************************************************************************/

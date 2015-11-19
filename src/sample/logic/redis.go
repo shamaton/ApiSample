@@ -147,6 +147,96 @@ func (this *redisRepo) ExpireAt(c *gin.Context, key string, t time.Time) (bool, 
 	return v, nil
 }
 
+/////////////////////////////
+
+// ZADD [NX]XX] key score member
+func (this *redisRepo) ZAdd(c *gin.Context, key string, member string, score int, options ...interface{}) (int, error) {
+	conn := this.getConnection(c)
+
+	// TODO:option解析
+
+	v, err := redis.Int(conn.Do("ZADD", key, score, member))
+	if err != nil {
+		return 0, err
+	}
+
+	return v, nil
+}
+
+func (this *redisRepo) ZAdds(c *gin.Context, key string, scoreMap map[string]int, options ...interface{}) (int, error) {
+	conn := this.getConnection(c)
+
+	// TODO:option解析
+
+	var args []interface{}
+	args = append(args, key)
+	for member, score := range scoreMap {
+		args = append(args, score, member)
+	}
+
+	v, err := redis.Int(conn.Do("ZADD", args...))
+	if err != nil {
+		return 0, err
+	}
+
+	return v, nil
+}
+
+func (this *redisRepo) ZRevRange(c *gin.Context, key string, start int, stop int) ([]map[string]int, error) {
+	conn := this.getConnection(c)
+
+	values, err := redis.Values(conn.Do("ZREVRANGE", key, start, stop, "WITHSCORES"))
+	if err != nil {
+		return nil, err
+	}
+
+	// mapping
+	mapArray := []map[string]int{}
+	for i := 0; i < len(values); i += 2 {
+		m := map[string]int{}
+		str, err := redis.String(values[i], nil)
+		if err != nil {
+			return nil, err
+		}
+		value, err := redis.Int(values[i+1], nil)
+		if err != nil {
+			return nil, err
+		}
+		m[str] = value
+		mapArray = append(mapArray, m)
+	}
+
+	return mapArray, nil
+}
+
+func (this *redisRepo) ZRevRangeAll(c *gin.Context, key string) ([]map[string]int, error) {
+	return this.ZRevRange(c, key, 0, -1)
+}
+
+func (this *redisRepo) ZRevRank(c *gin.Context, key string, member string) (int, error) {
+	conn := this.getConnection(c)
+
+	v, err := redis.Int(conn.Do("ZREVRANK", key, member))
+	if err != nil {
+		return -1, err
+	}
+
+	// TODO:vのnilチェック?
+
+	return v, nil
+}
+
+func (this *redisRepo) ZScore(c *gin.Context, key string, member string) (int, error) {
+	conn := this.getConnection(c)
+
+	v, err := redis.Int(conn.Do("ZSCORE", key, member))
+	if err != nil {
+		return -1, err
+	}
+
+	return v, nil
+}
+
 func (this *redisRepo) getConnection(c *gin.Context) redis.Conn {
 	ctx := c.MustGet(ckey.GContext).(context.Context)
 	pool := ctx.Value(ckey.MemdPool).(*redis.Pool)
