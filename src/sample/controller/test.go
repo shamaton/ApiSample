@@ -354,7 +354,10 @@ func TestUserMisc(c *gin.Context) {
 	redisRepo := logic.NewRedisRepo()
 	redisRepo.Set(c, "test_key", 777)
 	redisRepo.Set(c, "test_key2", 1234)
-	redisRepo.Set(c, "test_key3", "logic test")
+
+	option := logic.RedisOption{"NX": true, "EX": 10}
+	err := redisRepo.Set(c, "test_key3", "logic test", option)
+	log.Error(err)
 
 	user := &model.User{Id: 777, Name: "hoge", Score: 123, CreatedAt: time.Now()}
 	redisRepo.Set(c, "test_key4", user)
@@ -366,7 +369,6 @@ func TestUserMisc(c *gin.Context) {
 	var a uint16
 	redisRepo.Get(c, "test_key2", &a)
 	l("a", a)
-	log.Debug("a ---------------> ", a)
 
 	var b string
 	redisRepo.Get(c, "test_key3", &b)

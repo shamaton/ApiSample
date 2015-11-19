@@ -8,6 +8,9 @@ import (
 
 	"time"
 
+	"errors"
+
+	"github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/context"
@@ -20,7 +23,9 @@ func NewRedisRepo() *redisRepo {
 type redisRepo struct {
 }
 
-/* TODO:optionを実装する
+type RedisOption map[string]interface{}
+
+/*
 EX seconds -- Set the specified expire time, in seconds.
 PX milliseconds -- Set the specified expire time, in milliseconds.
 NX -- Only set the key if it does not already exist.
@@ -29,35 +34,74 @@ XX -- Only set the key if it already exist.
 func (this *redisRepo) Set(c *gin.Context, key string, value interface{}, options ...interface{}) error {
 	conn := this.getConnection(c)
 
-	var refVal reflect.Value
-	ref := reflect.ValueOf(value)
+	// オプションチェック
+	optArgs, err := this.checkOption(this.checkSetOption, options...)
+	if err != nil {
+		return err
+	}
 
 	// ポインタの場合要素を参照する
+	var refVal reflect.Value
+	ref := reflect.ValueOf(value)
 	if ref.Kind() == reflect.Ptr {
 		refVal = ref.Elem()
 	} else {
 		refVal = ref
 	}
 
+	// 実行に使う定義
+	var args []interface{}
+
+	// 構造体の場合、JSON化してSET
 	switch refVal.Kind() {
 	case reflect.Struct:
 		j, err := json.Marshal(value)
 		if err != nil {
 			return err
 		}
-		_, err = conn.Do("SET", key, j, "EX", 10)
-		if err != nil {
-			return err
-		}
+		args = append(args, key, j)
 
 	default:
-		_, err := conn.Do("SET", key, refVal, "EX", 10)
-		if err != nil {
-			return err
-		}
+		args = append(args, key, refVal)
+		seelog.Debug(refVal)
+	}
+
+	// optionを後ろにつける
+	args = append(args, optArgs...)
+
+	// SET
+	_, err = conn.Do("SET", args...)
+	if err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func (this *redisRepo) checkSetOption(option RedisOption) ([]interface{}, error) {
+	var args []interface{}
+	setNxXx := 0
+	setExPx := 0
+
+	for key, value := range option {
+		switch key {
+		case "EX", "PX":
+			args = append([]interface{}{key, value}, args...)
+			setExPx++
+		case "NX", "XX":
+			args = append(args, key)
+			setNxXx++
+		default:
+			return nil, errors.New("invalid key : " + key)
+		}
+	}
+
+	// 2重渡しチェック
+	if setExPx > 1 || setNxXx > 1 {
+		return nil, errors.New("invalid option setting!!")
+	}
+
+	return args, nil
 }
 
 func (this *redisRepo) Get(c *gin.Context, key string, holder interface{}) error {
@@ -233,6 +277,30 @@ func (this *redisRepo) ZScore(c *gin.Context, key string, member string) (int, e
 	}
 
 	return v, nil
+}
+
+func (this *redisRepo) checkOption(f func(RedisOption) ([]interface{}, error), options ...interface{}) ([]interface{}, error) {
+	// 何もしない
+	if len(options) < 1 {
+		return nil, nil
+	}
+	// 複数は許さない
+	if len(options) > 1 {
+		return nil, errors.New("opiton can set only one!!")
+	}
+
+	// typeが違うのはダメ
+	switch options[0].(type) {
+	case RedisOption:
+		args, err := f(options[0].(RedisOption))
+		if err != nil {
+			return nil, err
+		}
+		return args, nil
+	}
+
+	// ここに到達すべきではない
+	return nil, errors.New("undefined type!!")
 }
 
 func (this *redisRepo) getConnection(c *gin.Context) redis.Conn {
