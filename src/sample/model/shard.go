@@ -9,23 +9,28 @@ package model
 
 import (
 	"errors"
+
 	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 )
 
 /**
- *
+ * interface
  */
-
-type ShardRepo interface {
-	findShardId(*gin.Context, int, interface{}, ...interface{}) (int, error)
+type shardRepoI interface {
+	FindShardId(*gin.Context, int, interface{}, ...interface{}) (int, error)
 }
 
-func NewShardRepo() ShardRepo {
-	return ShardRepoImpl{}
+/**************************************************************************************************/
+/*!
+ *  DB操作オブジェクトの生成
+ */
+/**************************************************************************************************/
+func NewShardRepo() shardRepoI {
+	return &shardRepo{}
 }
 
-type ShardRepoImpl struct {
+type shardRepo struct {
 }
 
 /**************************************************************************************************/
@@ -37,7 +42,7 @@ type ShardRepoImpl struct {
  *  \return  shard ID、エラー
  */
 /**************************************************************************************************/
-func (r ShardRepoImpl) findShardId(c *gin.Context, st int, value interface{}, options ...interface{}) (int, error) {
+func (r *shardRepo) FindShardId(c *gin.Context, st int, value interface{}, options ...interface{}) (int, error) {
 	var shardId int
 	var err error
 

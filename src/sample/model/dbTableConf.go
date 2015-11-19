@@ -46,58 +46,10 @@ type DbTableConf struct {
 var dbTableConfCache = map[string]DbTableConf{}
 
 /**
- * table data method
+ * interface
  */
-/**************************************************************************************************/
-/*!
- *  マスタデータか
- *  \return  true or false
- */
-/**************************************************************************************************/
-func (d *DbTableConf) IsUseTypeMaster() bool {
-	if d.UseType == useTypeMaster {
-		return true
-	}
-	return false
-}
-
-/**************************************************************************************************/
-/*!
- *  シャードデータか
- *  \return  true or false
- */
-/**************************************************************************************************/
-func (d *DbTableConf) IsUseTypeShard() bool {
-	if d.UseType == useTypeShard {
-		return true
-	}
-	return false
-}
-
-/**************************************************************************************************/
-/*!
- *  USER_IDでシャーディングされているか
- *  \return  true or false
- */
-/**************************************************************************************************/
-func (d *DbTableConf) IsShardTypeUser() bool {
-	if d.ShardType == shardTypeUser {
-		return true
-	}
-	return false
-}
-
-/**************************************************************************************************/
-/*!
- *  GROUP_IDでシャーディングされているか
- *  \return  true or false
- */
-/**************************************************************************************************/
-func (d *DbTableConf) IsShardTypeGroup() bool {
-	if d.ShardType == shardTypeGroup {
-		return true
-	}
-	return false
+type dbTableConfRepoI interface {
+	Find(*gin.Context, string) (*DbTableConf, error)
 }
 
 /**
@@ -108,10 +60,6 @@ func (d *DbTableConf) IsShardTypeGroup() bool {
  *  DB操作オブジェクトの生成
  */
 /**************************************************************************************************/
-type dbTableConfRepoI interface {
-	Find(*gin.Context, string) (*DbTableConf, error)
-}
-
 func NewDbTableConfRepo() dbTableConfRepoI {
 	repo := &dbTableConfRepo{
 		table:   "db_table_conf",
@@ -211,4 +159,59 @@ func (this *dbTableConfRepo) makeCache(c *gin.Context) error {
 		dbTableConfCache[v.TableName] = v
 	}
 	return err
+}
+
+/**
+ * table data method
+ */
+/**************************************************************************************************/
+/*!
+ *  マスタデータか
+ *  \return  true or false
+ */
+/**************************************************************************************************/
+func (d *DbTableConf) IsUseTypeMaster() bool {
+	if d.UseType == useTypeMaster {
+		return true
+	}
+	return false
+}
+
+/**************************************************************************************************/
+/*!
+ *  シャードデータか
+ *  \return  true or false
+ */
+/**************************************************************************************************/
+func (d *DbTableConf) IsUseTypeShard() bool {
+	if d.UseType == useTypeShard {
+		return true
+	}
+	return false
+}
+
+/**************************************************************************************************/
+/*!
+ *  USER_IDでシャーディングされているか
+ *  \return  true or false
+ */
+/**************************************************************************************************/
+func (d *DbTableConf) IsShardTypeUser() bool {
+	if d.ShardType == shardTypeUser {
+		return true
+	}
+	return false
+}
+
+/**************************************************************************************************/
+/*!
+ *  GROUP_IDでシャーディングされているか
+ *  \return  true or false
+ */
+/**************************************************************************************************/
+func (d *DbTableConf) IsShardTypeGroup() bool {
+	if d.ShardType == shardTypeGroup {
+		return true
+	}
+	return false
 }
