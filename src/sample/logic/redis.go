@@ -63,7 +63,6 @@ func (this *redisRepo) Set(c *gin.Context, key string, value interface{}, option
 
 	default:
 		args = append(args, key, refVal)
-		seelog.Debug(refVal)
 	}
 
 	// optionを後ろにつける
@@ -195,9 +194,17 @@ func (this *redisRepo) ExpireAt(c *gin.Context, key string, t time.Time) (bool, 
 func (this *redisRepo) ZAdd(c *gin.Context, key string, member string, score int, options ...interface{}) (int, error) {
 	conn := this.getConnection(c)
 
-	// TODO:option解析
+	// オプションチェック
+	optArgs, err := this.checkOption(this.checkZAddOption, options...)
+	if err != nil {
+		return 0, err
+	}
 
-	v, err := redis.Int(conn.Do("ZADD", key, score, member))
+	args := []interface{}{key}
+	args = append(args, optArgs...)
+	args = append(args, score, member)
+
+	v, err := redis.Int(conn.Do("ZADD", args...))
 	if err != nil {
 		return 0, err
 	}
@@ -208,10 +215,18 @@ func (this *redisRepo) ZAdd(c *gin.Context, key string, member string, score int
 func (this *redisRepo) ZAdds(c *gin.Context, key string, scoreMap map[string]int, options ...interface{}) (int, error) {
 	conn := this.getConnection(c)
 
-	// TODO:option解析
+	// オプションチェック
+	optArgs, err := this.checkOption(this.checkZAddOption, options...)
+	if err != nil {
+		return 0, err
+	}
 
 	var args []interface{}
 	args = append(args, key)
+
+	// optionを付加
+	args = append(args, optArgs...)
+
 	for member, score := range scoreMap {
 		args = append(args, score, member)
 	}
@@ -222,6 +237,27 @@ func (this *redisRepo) ZAdds(c *gin.Context, key string, scoreMap map[string]int
 	}
 
 	return v, nil
+}
+
+func (this *redisRepo) checkZAddOption(option RedisOption) ([]interface{}, error) {
+	var args []interface{}
+	setNxXx := 0
+
+	keys := []string{"NX", "XX", "CH", "INCR"}
+
+	for _, key := range keys {
+		_, valid := option[key]
+		if valid {
+			args = append(args, key)
+		}
+	}
+
+	// 2重渡しチェック
+	if setNxXx > 1 {
+		return nil, errors.New("invalid option setting!!")
+	}
+
+	return args, nil
 }
 
 func (this *redisRepo) ZRevRange(c *gin.Context, key string, start int, stop int) ([]map[string]int, error) {
@@ -260,10 +296,10 @@ func (this *redisRepo) ZRevRank(c *gin.Context, key string, member string) (int,
 
 	v, err := redis.Int(conn.Do("ZREVRANK", key, member))
 	if err != nil {
-		return -1, err
+		return v, err
 	}
 
-	// TODO:vのnilチェック?
+	// NOTE : スコアが見つからない場合はエラーが返るが、判断を上層で行う
 
 	return v, nil
 }
@@ -273,8 +309,10 @@ func (this *redisRepo) ZScore(c *gin.Context, key string, member string) (int, e
 
 	v, err := redis.Int(conn.Do("ZSCORE", key, member))
 	if err != nil {
-		return -1, err
+		return v, err
 	}
+
+	// NOTE : スコアが見つからない場合はエラーが返るが、判断を上層で行う
 
 	return v, nil
 }

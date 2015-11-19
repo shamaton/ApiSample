@@ -401,8 +401,8 @@ func TestUserMisc(c *gin.Context) {
 
 	// ranking
 	scores := map[string]int{"a": 2, "b": 1, "c": 4, "d": 3, "e": 5}
-	redisRepo.ZAdd(c, "ranking", "f", 10)
-	redisRepo.ZAdds(c, "ranking", scores)
+	redisRepo.ZAdd(c, "ranking", "f", 10, option)
+	redisRepo.ZAdds(c, "ranking", scores, option)
 
 	score, _ := redisRepo.ZScore(c, "ranking", "a")
 	l("ranking score", score)
@@ -412,6 +412,9 @@ func TestUserMisc(c *gin.Context) {
 	l("ranking", ranking)
 	allranking, _ := redisRepo.ZRevRangeAll(c, "ranking")
 	l("ranking_all", allranking)
+
+	rank, _ = redisRepo.ZRevRank(c, "ranking", "abbb")
+	l("now rank is", rank)
 
 	dir, _ := os.Getwd()
 	log.Debug("path : ", dir)
