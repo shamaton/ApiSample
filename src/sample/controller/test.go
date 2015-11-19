@@ -352,6 +352,10 @@ func TestUserMisc(c *gin.Context) {
 
 	ctx := c.Value(ckey.GContext).(context.Context)
 
+	l := func(str string, param interface{}) {
+		log.Debug(str, " ---------------> ", param)
+	}
+
 	// MEMD TEST
 	redisTest(ctx)
 
@@ -384,6 +388,21 @@ func TestUserMisc(c *gin.Context) {
 	log.Debug("exists 1 --------------------> ", res)
 	res, _ = redisRepo.Exists(c, "ranking_test", "hoge")
 	log.Debug("exists 2 --------------------> ", res)
+
+	// expire
+	redisRepo.Set(c, "expire_test", "test")
+	res, _ = redisRepo.Expire(c, "expire_test", 10)
+	l("expire_test", res)
+	res, _ = redisRepo.Expire(c, "_expire_test", 10)
+	l("_expire_test", res)
+
+	// expire_at
+	expire_at := time.Now().Add(10 * time.Second)
+	redisRepo.Set(c, "expire_at_test", "test")
+	res, _ = redisRepo.ExpireAt(c, "expire_at_test", expire_at)
+	l("expire_at_test", res)
+	res, _ = redisRepo.ExpireAt(c, "_expire_at_test", expire_at)
+	l("_expire_at_test", res)
 
 	dir, _ := os.Getwd()
 	log.Debug("path : ", dir)

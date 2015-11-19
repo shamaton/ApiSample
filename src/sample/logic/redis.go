@@ -6,6 +6,8 @@ import (
 
 	"encoding/json"
 
+	"time"
+
 	log "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
@@ -19,6 +21,12 @@ func NewRedisRepo() *redisRepo {
 type redisRepo struct {
 }
 
+/* TODO:optionを実装する
+EX seconds -- Set the specified expire time, in seconds.
+PX milliseconds -- Set the specified expire time, in milliseconds.
+NX -- Only set the key if it does not already exist.
+XX -- Only set the key if it already exist.
+*/
 func (this *redisRepo) Set(c *gin.Context, key string, value interface{}, options ...interface{}) error {
 	conn := this.getConnection(c)
 
@@ -115,6 +123,28 @@ func (this *redisRepo) Exists(c *gin.Context, key string, keys ...string) (bool,
 		isExists = true
 	}
 	return isExists, nil
+}
+
+func (this *redisRepo) Expire(c *gin.Context, key string, second int) (bool, error) {
+	conn := this.getConnection(c)
+
+	v, err := redis.Bool(conn.Do("EXPIRE", key, second))
+	if err != nil {
+		return false, err
+	}
+
+	return v, nil
+}
+
+func (this *redisRepo) ExpireAt(c *gin.Context, key string, t time.Time) (bool, error) {
+	conn := this.getConnection(c)
+
+	v, err := redis.Bool(conn.Do("EXPIREAT", key, t.Unix()))
+	if err != nil {
+		return false, err
+	}
+
+	return v, nil
 }
 
 func (this *redisRepo) getConnection(c *gin.Context) redis.Conn {
