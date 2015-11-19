@@ -10,7 +10,6 @@ import (
 
 	"errors"
 
-	"github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/context"
