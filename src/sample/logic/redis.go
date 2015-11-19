@@ -1,5 +1,13 @@
 package logic
 
+/**************************************************************************************************/
+/*!
+ *  redis.go
+ *
+ *  redisに関連する操作群
+ *
+ */
+/**************************************************************************************************/
 import (
 	"reflect"
 	ckey "sample/conf/context"
@@ -15,14 +23,26 @@ import (
 	"golang.org/x/net/context"
 )
 
-func NewRedisRepo() *redisRepo {
-	return &redisRepo{}
-}
+/**
+ * オプション用マップ
+ */
+type RedisOption map[string]interface{}
+type optionFunc func(RedisOption) ([]interface{}, error)
 
+/**
+ * redis accessor
+ */
 type redisRepo struct {
 }
 
-type RedisOption map[string]interface{}
+/**************************************************************************************************/
+/*!
+ *  操作オブジェクトの生成
+ */
+/**************************************************************************************************/
+func NewRedisRepo() *redisRepo {
+	return &redisRepo{}
+}
 
 /*
 EX seconds -- Set the specified expire time, in seconds.
@@ -30,11 +50,22 @@ PX milliseconds -- Set the specified expire time, in milliseconds.
 NX -- Only set the key if it does not already exist.
 XX -- Only set the key if it already exist.
 */
+/**************************************************************************************************/
+/*!
+ *  COMMAND : SET
+ *
+ *  \param   c       : コンテキスト
+ *  \param   key     : キー
+ *  \param   value   : 保存値
+ *  \param   options : [EX|PX] [NX|XX]
+ *  \return  失敗時エラー
+ */
+/**************************************************************************************************/
 func (this *redisRepo) Set(c *gin.Context, key string, value interface{}, options ...interface{}) error {
 	conn := this.getConnection(c)
 
 	// オプションチェック
-	optArgs, err := this.checkOption(this.checkSetOption, options...)
+	optArgs, err := this.checkOption(this.checkSetOption, options)
 	if err != nil {
 		return err
 	}
@@ -76,6 +107,14 @@ func (this *redisRepo) Set(c *gin.Context, key string, value interface{}, option
 	return nil
 }
 
+/**************************************************************************************************/
+/*!
+ *  SETコマンドのoptionチェック
+ *
+ *  \param   options : [EX|PX] [NX|XX]
+ *  \return  オプション配列、失敗時エラー
+ */
+/**************************************************************************************************/
 func (this *redisRepo) checkSetOption(option RedisOption) ([]interface{}, error) {
 	var args []interface{}
 	setNxXx := 0
@@ -102,6 +141,16 @@ func (this *redisRepo) checkSetOption(option RedisOption) ([]interface{}, error)
 	return args, nil
 }
 
+/**************************************************************************************************/
+/*!
+ *  COMMAND : GET
+ *
+ *  \param   c       : コンテキスト
+ *  \param   key     : キー
+ *  \param   holder  : 格納先
+ *  \return  失敗時エラー
+ */
+/**************************************************************************************************/
 func (this *redisRepo) Get(c *gin.Context, key string, holder interface{}) error {
 	conn := this.getConnection(c)
 
@@ -140,7 +189,16 @@ func (this *redisRepo) Get(c *gin.Context, key string, holder interface{}) error
 	return nil
 }
 
-// 全て存在する場合はtrue
+/**************************************************************************************************/
+/*!
+ *  COMMAND : EXISTS
+ *
+ *  \param   c    : コンテキスト
+ *  \param   key  : キー
+ *  \param   keys : 複数のキー
+ *  \return  全て存在する場合true、失敗時エラー
+ */
+/**************************************************************************************************/
 func (this *redisRepo) Exists(c *gin.Context, key string, keys ...string) (bool, error) {
 	conn := this.getConnection(c)
 
@@ -165,6 +223,16 @@ func (this *redisRepo) Exists(c *gin.Context, key string, keys ...string) (bool,
 	return isExists, nil
 }
 
+/**************************************************************************************************/
+/*!
+ *  COMMAND : EXPIRE
+ *
+ *  \param   c       : コンテキスト
+ *  \param   key     : キー
+ *  \param   second  : 秒
+ *  \return  成功時true、失敗時エラー
+ */
+/**************************************************************************************************/
 func (this *redisRepo) Expire(c *gin.Context, key string, second int) (bool, error) {
 	conn := this.getConnection(c)
 
@@ -176,6 +244,16 @@ func (this *redisRepo) Expire(c *gin.Context, key string, second int) (bool, err
 	return v, nil
 }
 
+/**************************************************************************************************/
+/*!
+ *  COMMAND : EXPIREAT
+ *
+ *  \param   c    : コンテキスト
+ *  \param   key  : キー
+ *  \param   time : timeオブジェクト
+ *  \return  成功時true、失敗時エラー
+ */
+/**************************************************************************************************/
 func (this *redisRepo) ExpireAt(c *gin.Context, key string, t time.Time) (bool, error) {
 	conn := this.getConnection(c)
 
@@ -187,14 +265,25 @@ func (this *redisRepo) ExpireAt(c *gin.Context, key string, t time.Time) (bool, 
 	return v, nil
 }
 
-/////////////////////////////
-
-// ZADD [NX]XX] key score member
+/**************************************************************************************************/
+/*!
+ *  COMMAND : ZADD
+ *
+ *  ex : ZADD, [option], ranking, 1(score), user(member)
+ *
+ *  \param   c       : コンテキスト
+ *  \param   key     : キー
+ *  \param   member  : メンバー値
+ *  \param   score   : スコア
+ *  \param   options : [NX|XX] [CH] [INCR]
+ *  \return  失敗時エラー
+ */
+/**************************************************************************************************/
 func (this *redisRepo) ZAdd(c *gin.Context, key string, member string, score int, options ...interface{}) (int, error) {
 	conn := this.getConnection(c)
 
 	// オプションチェック
-	optArgs, err := this.checkOption(this.checkZAddOption, options...)
+	optArgs, err := this.checkOption(this.checkZAddOption, options)
 	if err != nil {
 		return 0, err
 	}
@@ -211,11 +300,24 @@ func (this *redisRepo) ZAdd(c *gin.Context, key string, member string, score int
 	return v, nil
 }
 
+/**************************************************************************************************/
+/*!
+ *  ZADDをまとめて実行する
+ *
+ *  ex : ZADD, [option], ranking, 1(score), user(member), score, member...
+ *
+ *  \param   c        : コンテキスト
+ *  \param   key      : キー
+ *  \param   scoreMap : [member:score]なマップ
+ *  \param   options  : [NX|XX] [CH] [INCR]
+ *  \return  addされた数、失敗時エラー
+ */
+/**************************************************************************************************/
 func (this *redisRepo) ZAdds(c *gin.Context, key string, scoreMap map[string]int, options ...interface{}) (int, error) {
 	conn := this.getConnection(c)
 
 	// オプションチェック
-	optArgs, err := this.checkOption(this.checkZAddOption, options...)
+	optArgs, err := this.checkOption(this.checkZAddOption, options)
 	if err != nil {
 		return 0, err
 	}
@@ -238,6 +340,14 @@ func (this *redisRepo) ZAdds(c *gin.Context, key string, scoreMap map[string]int
 	return v, nil
 }
 
+/**************************************************************************************************/
+/*!
+ *  ZADDのオプションチェック
+ *
+ *  \param   option : [NX|XX] [CH] [INCR]
+ *  \return  オプション配列、失敗時エラー
+ */
+/**************************************************************************************************/
 func (this *redisRepo) checkZAddOption(option RedisOption) ([]interface{}, error) {
 	var args []interface{}
 	setNxXx := 0
@@ -259,6 +369,19 @@ func (this *redisRepo) checkZAddOption(option RedisOption) ([]interface{}, error
 	return args, nil
 }
 
+/**************************************************************************************************/
+/*!
+ *  COMMAND : ZREVRANGE
+ *
+ *  ex : ZREVRANGE, ranking, start, stop
+ *
+ *  \param   c     : コンテキスト
+ *  \param   key   : キー
+ *  \param   start : 検索開始位置
+ *  \param   stop  : 検索終了位置
+ *  \return  [member:score]な配列、失敗時エラー
+ */
+/**************************************************************************************************/
 func (this *redisRepo) ZRevRange(c *gin.Context, key string, start int, stop int) ([]map[string]int, error) {
 	conn := this.getConnection(c)
 
@@ -286,10 +409,36 @@ func (this *redisRepo) ZRevRange(c *gin.Context, key string, start int, stop int
 	return mapArray, nil
 }
 
+/**************************************************************************************************/
+/*!
+ *  ZREVRANGEの全範囲版
+ *
+ *  ex : ZREVRANGE, ranking, 0, -1
+ *
+ *  \param   c     : コンテキスト
+ *  \param   key   : キー
+ *  \param   start : 検索開始位置
+ *  \param   stop  : 検索終了位置
+ *  \return  [member:score]な配列、失敗時エラー
+ */
+/**************************************************************************************************/
 func (this *redisRepo) ZRevRangeAll(c *gin.Context, key string) ([]map[string]int, error) {
 	return this.ZRevRange(c, key, 0, -1)
 }
 
+/**************************************************************************************************/
+/*!
+ *  COMMAND : ZREVRANK
+ *
+ *  ランクが見つからない場合はエラーが返るが、判断を上層で行うこと(v=0)
+ *  ex : ZREVRANK, ranking, member
+ *
+ *  \param   c      : コンテキスト
+ *  \param   key    : キー
+ *  \param   member : キー内メンバー
+ *  \return  RANK_INDEX、失敗時エラー
+ */
+/**************************************************************************************************/
 func (this *redisRepo) ZRevRank(c *gin.Context, key string, member string) (int, error) {
 	conn := this.getConnection(c)
 
@@ -303,6 +452,19 @@ func (this *redisRepo) ZRevRank(c *gin.Context, key string, member string) (int,
 	return v, nil
 }
 
+/**************************************************************************************************/
+/*!
+ *  COMMAND : ZSCORE
+ *
+ *  スコアが見つからない場合はエラーが返るが、判断を上層で行うこと(v=0)
+ *  ex : ZSCORE, ranking, member
+ *
+ *  \param   c      : コンテキスト
+ *  \param   key    : キー
+ *  \param   member : キー内メンバー
+ *  \return  score、失敗時エラー
+ */
+/**************************************************************************************************/
 func (this *redisRepo) ZScore(c *gin.Context, key string, member string) (int, error) {
 	conn := this.getConnection(c)
 
@@ -311,12 +473,21 @@ func (this *redisRepo) ZScore(c *gin.Context, key string, member string) (int, e
 		return v, err
 	}
 
-	// NOTE : スコアが見つからない場合はエラーが返るが、判断を上層で行う
-
 	return v, nil
 }
 
-func (this *redisRepo) checkOption(f func(RedisOption) ([]interface{}, error), options ...interface{}) ([]interface{}, error) {
+/**************************************************************************************************/
+/*!
+ *  オプションの確認
+ *
+ *  typeだけ確認し、fに処理を委譲する
+ *
+ *  \param   f       : 委譲先
+ *  \param   options : 解析前オプション配列
+ *  \return  オプション配列、失敗時エラー
+ */
+/**************************************************************************************************/
+func (this *redisRepo) checkOption(f optionFunc, options []interface{}) ([]interface{}, error) {
 	// 何もしない
 	if len(options) < 1 {
 		return nil, nil
@@ -340,6 +511,14 @@ func (this *redisRepo) checkOption(f func(RedisOption) ([]interface{}, error), o
 	return nil, errors.New("undefined type!!")
 }
 
+/**************************************************************************************************/
+/*!
+ *  redisへのコネクションを取得する
+ *
+ *  \param   c : コンテキスト
+ *  \return  redisへのコネクション
+ */
+/**************************************************************************************************/
 func (this *redisRepo) getConnection(c *gin.Context) redis.Conn {
 	ctx := c.MustGet(ckey.GContext).(context.Context)
 	pool := ctx.Value(ckey.MemdPool).(*redis.Pool)
