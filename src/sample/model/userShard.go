@@ -17,7 +17,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-
 /**
  * \struct UserShard
  * \brief テーブル定義
@@ -27,30 +26,67 @@ type UserShard struct {
 	ShardId int `db:"shard_id"`
 }
 
-
 /**
  * Interface
  */
-type UserShardRepo interface {
+type userShardRepoI interface {
 	FindByUserId(*gin.Context, interface{}, ...interface{}) (*UserShard, error)
 
 	Create(*gin.Context, *UserShard) error
 }
 
+/**
+ * db accessor function
+ */
 /**************************************************************************************************/
 /*!
- *  リポジトリ操作オブジェクトの生成
+ *  DB操作オブジェクトの生成
  */
 /**************************************************************************************************/
-func NewUserShardRepo() UserShardRepo {
-	return UserShardRepoImpl{table: "user_shard"}
+func NewUserShardRepo() userShardRepoI {
+	repo := &userShardRepo{
+		table:   "user_shard",
+		columns: "id, shard_id",
+	}
+	return repo
 }
 
-/**
- * Implementer
+type userShardRepo struct {
+	table   string
+	columns string
+}
+
+/**************************************************************************************************/
+/*!
+ *  シャードデータ作成
+ *
+ *  \param   c         : コンテキスト
+ *  \param   userShard : データ構造体
+ *  \return  失敗時、エラー
  */
-type UserShardRepoImpl struct {
-	table string
+/**************************************************************************************************/
+func (this *userShardRepo) Create(c *gin.Context, userShard *UserShard) error {
+	// SQL生成
+	sql, args, err := builder.Insert("user_shard").Options("IGNORE").Values(userShard.Id, userShard.ShardId).ToSql()
+	if err != nil {
+		log.Error("sql maker error!!")
+		return err
+	}
+
+	// get master tx
+	tx, err := DBI.GetTransaction(c, DBI.MODE_W, false, 0)
+	if err != nil {
+		log.Error("transaction error!!")
+		return err
+	}
+
+	// create
+	log.Critical(sql, args)
+	_, err = tx.Exec(sql, args...)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 /**************************************************************************************************/
@@ -62,7 +98,7 @@ type UserShardRepoImpl struct {
  *  \return  shard ID、エラー
  */
 /**************************************************************************************************/
-func (r UserShardRepoImpl) FindByUserId(c *gin.Context, userId interface{}, options ...interface{}) (*UserShard, error) {
+func (this *userShardRepo) FindByUserId(c *gin.Context, userId interface{}, options ...interface{}) (*UserShard, error) {
 	var err error
 	var userShard UserShard
 
@@ -83,7 +119,7 @@ func (r UserShardRepoImpl) FindByUserId(c *gin.Context, userId interface{}, opti
 		}
 
 		// クエリ生成
-		sql, args, err := builder.Select("id, shard_id").From(r.table).Where("id = ?", userId).ToSql()
+		sql, args, err := builder.Select(this.columns).From(this.table).Where("id = ?", userId).ToSql()
 		if err != nil {
 			log.Error("query build error!!")
 			return nil, err
@@ -99,12 +135,12 @@ func (r UserShardRepoImpl) FindByUserId(c *gin.Context, userId interface{}, opti
 			log.Info("not found user shard id")
 		}
 	} else {
-		cv, err := cache.Get(r.table, "all")
+		cv, err := cache.Get(this.table, "all")
 		if err != nil {
 			return nil, err
 		}
 		if cv == nil {
-			cv, err = r.makeCache(c)
+			cv, err = this.makeCache(c)
 			if err != nil {
 				return nil, err
 			}
@@ -124,7 +160,7 @@ func (r UserShardRepoImpl) FindByUserId(c *gin.Context, userId interface{}, opti
  *  \return  全データ、エラー
  */
 /**************************************************************************************************/
-func (impl UserShardRepoImpl) finds(c *gin.Context) (*[]UserShard, error) {
+func (this *userShardRepo) finds(c *gin.Context) (*[]UserShard, error) {
 	// ハンドル取得
 	conn, err := DBI.GetDBMasterConnection(c, DBI.MODE_R)
 	if err != nil {
@@ -156,8 +192,8 @@ func (impl UserShardRepoImpl) finds(c *gin.Context) (*[]UserShard, error) {
  *  \return  cacheGetしたものと同等のデータ、エラー
  */
 /**************************************************************************************************/
-func (impl UserShardRepoImpl) makeCache(c *gin.Context) (interface{}, error) {
-	allData, err := impl.finds(c)
+func (this *userShardRepo) makeCache(c *gin.Context) (interface{}, error) {
+	allData, err := this.finds(c)
 	if err != nil {
 		return nil, err
 	}
@@ -166,39 +202,6 @@ func (impl UserShardRepoImpl) makeCache(c *gin.Context) (interface{}, error) {
 	for _, v := range *allData {
 		dataMap[v.Id] = v
 	}
-	cache.Set(impl.table, "all", dataMap)
+	cache.Set(this.table, "all", dataMap)
 	return dataMap, nil
-}
-
-/**************************************************************************************************/
-/*!
- *  シャードデータ作成
- *
- *  \param   c         : コンテキスト
- *  \param   userShard : データ構造体
- *  \return  失敗時、エラー
- */
-/**************************************************************************************************/
-func (impl UserShardRepoImpl) Create(c *gin.Context, userShard *UserShard) error {
-	// SQL生成
-	sql, args, err := builder.Insert("user_shard").Options("IGNORE").Values(userShard.Id, userShard.ShardId).ToSql()
-	if err != nil {
-		log.Error("sql maker error!!")
-		return err
-	}
-
-	// get master tx
-	tx, err := DBI.GetTransaction(c, DBI.MODE_W, false, 0)
-	if err != nil {
-		log.Error("transaction error!!")
-		return err
-	}
-
-	// create
-	log.Critical(sql, args)
-	_, err = tx.Exec(sql, args...)
-	if err != nil {
-		return err
-	}
-	return nil
 }
