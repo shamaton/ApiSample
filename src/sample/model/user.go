@@ -28,8 +28,12 @@ type User struct {
 }
 
 /**
- * db accessor function
+ * db accessor
  */
+type userRepo struct {
+	baseI
+}
+
 /**************************************************************************************************/
 /*!
  *  DB操作オブジェクトの生成
@@ -38,10 +42,6 @@ type User struct {
 func NewUserRepo() *userRepo {
 	b := NewBase("user")
 	return &userRepo{b}
-}
-
-type userRepo struct {
-	baseI
 }
 
 /**************************************************************************************************/

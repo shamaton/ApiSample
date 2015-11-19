@@ -21,6 +21,12 @@ type shardRepoI interface {
 	FindShardId(*gin.Context, int, interface{}, ...interface{}) (int, error)
 }
 
+/**
+ * db accessor
+ */
+type shardRepo struct {
+}
+
 /**************************************************************************************************/
 /*!
  *  DB操作オブジェクトの生成
@@ -28,9 +34,6 @@ type shardRepoI interface {
 /**************************************************************************************************/
 func NewShardRepo() shardRepoI {
 	return &shardRepo{}
-}
-
-type shardRepo struct {
 }
 
 /**************************************************************************************************/

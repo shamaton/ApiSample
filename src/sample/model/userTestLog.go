@@ -26,8 +26,12 @@ type UserTestLog struct {
 }
 
 /**
- * db accessor function
+ * db accessor
  */
+type userTestLogRepo struct {
+	baseI
+}
+
 /**************************************************************************************************/
 /*!
  *  DB操作オブジェクトの生成
@@ -36,10 +40,6 @@ type UserTestLog struct {
 func NewUserTestLogRepo() *userTestLogRepo {
 	b := NewBase("user_test_log")
 	return &userTestLogRepo{b}
-}
-
-type userTestLogRepo struct {
-	baseI
 }
 
 /**************************************************************************************************/

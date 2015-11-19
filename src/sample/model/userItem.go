@@ -28,8 +28,12 @@ type UserItem struct {
 }
 
 /**
- * db accessor function
+ * db accessor
  */
+type userItemRepo struct {
+	baseI
+}
+
 /**************************************************************************************************/
 /*!
  *  DB操作オブジェクトの生成
@@ -38,10 +42,6 @@ type UserItem struct {
 func NewUserItemRepo() *userItemRepo {
 	b := NewBase("user_item")
 	return &userItemRepo{b}
-}
-
-type userItemRepo struct {
-	baseI
 }
 
 /**************************************************************************************************/

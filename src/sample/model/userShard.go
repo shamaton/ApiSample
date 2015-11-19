@@ -36,8 +36,13 @@ type userShardRepoI interface {
 }
 
 /**
- * db accessor function
+ * db accessor
  */
+type userShardRepo struct {
+	table   string
+	columns string
+}
+
 /**************************************************************************************************/
 /*!
  *  DB操作オブジェクトの生成
@@ -49,11 +54,6 @@ func NewUserShardRepo() userShardRepoI {
 		columns: "id, shard_id",
 	}
 	return repo
-}
-
-type userShardRepo struct {
-	table   string
-	columns string
 }
 
 /**************************************************************************************************/

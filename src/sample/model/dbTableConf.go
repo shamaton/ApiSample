@@ -53,8 +53,13 @@ type dbTableConfRepoI interface {
 }
 
 /**
- * db accessor function
+ * db accessor
  */
+type dbTableConfRepo struct {
+	table   string
+	columns string
+}
+
 /**************************************************************************************************/
 /*!
  *  DB操作オブジェクトの生成
@@ -66,11 +71,6 @@ func NewDbTableConfRepo() dbTableConfRepoI {
 		columns: "id, table_name, use_type, shard_type",
 	}
 	return repo
-}
-
-type dbTableConfRepo struct {
-	table   string
-	columns string
 }
 
 /**************************************************************************************************/
