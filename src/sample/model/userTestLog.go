@@ -1,11 +1,18 @@
 package model
 
+/**************************************************************************************************/
+/*!
+ *  userTestLog.go
+ *
+ *  table : user_test_logのmodelクラス
+ *
+ */
+/**************************************************************************************************/
 import (
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
-
 
 /**
  * \struct UserTestLog
@@ -19,32 +26,20 @@ type UserTestLog struct {
 }
 
 /**
- * interface
+ * db accessor function
  */
-type UserTestLogRepo interface {
-	FindByID(*gin.Context, uint64, ...interface{}) *UserTestLog
-
-	Create(*gin.Context, *UserTestLog) error
-	CreateMulti(*gin.Context, *[]UserTestLog) error
-
-	Delete(*gin.Context, interface{}) error
-}
-
 /**************************************************************************************************/
 /*!
- *  リポジトリ操作オブジェクトの生成
+ *  DB操作オブジェクトの生成
  */
 /**************************************************************************************************/
-func NewUserTestLogRepo() UserTestLogRepo {
-	b := &base{table: "user_test_log"}
-	return UserTestLogRepoImpl{b}
+func NewUserTestLogRepo() *userTestLogRepo {
+	b := NewBase("user_test_log")
+	return &userTestLogRepo{b}
 }
 
-/**
- * implementer
- */
-type UserTestLogRepoImpl struct {
-	*base
+type userTestLogRepo struct {
+	baseI
 }
 
 /**************************************************************************************************/
@@ -57,41 +52,13 @@ type UserTestLogRepoImpl struct {
  *  \return  ログ(エラー時はnil)
  */
 /**************************************************************************************************/
-func (r UserTestLogRepoImpl) FindByID(c *gin.Context, id uint64, options ...interface{}) *UserTestLog {
+func (this *userTestLogRepo) FindByID(c *gin.Context, id uint64, options ...interface{}) *UserTestLog {
 	var userTestLog = new(UserTestLog)
 	userTestLog.Id = id
 	userTestLog.UserId = 1 // test
-	err := r.Find(c, userTestLog, options...)
+	err := this.Find(c, userTestLog, options...)
 	if err != nil {
 		return nil
 	}
 	return userTestLog
-}
-
-/**************************************************************************************************/
-/*!
- *  ログを挿入する
- *
- *  \param   c           : コンテキスト
- *  \param   userTestLog : ログデータ
- *  \return  エラー
- */
-/**************************************************************************************************/
-func (r UserTestLogRepoImpl) Create(c *gin.Context, userTestLog *UserTestLog) error {
-	err := r.base.Create(c, userTestLog)
-	return err
-}
-
-/**************************************************************************************************/
-/*!
- *  ログを複数挿入する
- *
- *  \param   c            : コンテキスト
- *  \param   userTestLogs : ログデータ
- *  \return  エラー
- */
-/**************************************************************************************************/
-func (r UserTestLogRepoImpl) CreateMulti(c *gin.Context, userTestLogs *[]UserTestLog) error {
-	err := r.base.CreateMulti(c, userTestLogs)
-	return err
 }
