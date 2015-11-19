@@ -8,7 +8,6 @@ import (
 
 	"time"
 
-	log "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/context"
@@ -33,8 +32,7 @@ func (this *redisRepo) Set(c *gin.Context, key string, value interface{}, option
 	var refVal reflect.Value
 	ref := reflect.ValueOf(value)
 
-	log.Error(ref.Kind())
-
+	// ポインタの場合要素を参照する
 	if ref.Kind() == reflect.Ptr {
 		refVal = ref.Elem()
 	} else {

@@ -11,8 +11,6 @@ import (
 	"fmt"
 	db "sample/DBI"
 
-	ckey "sample/conf/context"
-
 	"time"
 
 	"sample/logic"
@@ -20,10 +18,9 @@ import (
 	"os"
 
 	log "github.com/cihub/seelog"
-	"github.com/garyburd/redigo/redis"
+
 	"github.com/gin-gonic/gin"
 	"github.com/k0kubun/pp"
-	"golang.org/x/net/context"
 )
 
 type postData struct {
@@ -350,12 +347,9 @@ func TestUserLogCreate(c *gin.Context) {
 func TestUserMisc(c *gin.Context) {
 	defer db.RollBack(c)
 
-	ctx := c.Value(ckey.GContext).(context.Context)
-
 	l := func(str string, param interface{}) {
-		log.Debug(str, " ---------------> ", param)
+		log.Debug(str, " : ", param)
 	}
-
 
 	redisRepo := logic.NewRedisRepo()
 	redisRepo.Set(c, "test_key", 777)
@@ -365,27 +359,28 @@ func TestUserMisc(c *gin.Context) {
 	user := &model.User{Id: 777, Name: "hoge", Score: 123, CreatedAt: time.Now()}
 	redisRepo.Set(c, "test_key4", user)
 
-	var hoge int
-	redisRepo.Get(c, "test_key", &hoge)
-	log.Debug("hoge ---------------> ", hoge)
+	var t int
+	redisRepo.Get(c, "test_key", &t)
+	l("t", t)
 
 	var a uint16
 	redisRepo.Get(c, "test_key2", &a)
+	l("a", a)
 	log.Debug("a ---------------> ", a)
 
 	var b string
 	redisRepo.Get(c, "test_key3", &b)
-	log.Debug("b ---------------> ", b)
+	l("b", b)
 
 	var cc model.User
 	redisRepo.Get(c, "test_key4", &cc)
-	log.Debug("cc ---------------> ", cc)
+	l("c", cc)
 
 	// exists
 	res, _ := redisRepo.Exists(c, "ranking_test")
-	log.Debug("exists 1 --------------------> ", res)
+	l("exist1", res)
 	res, _ = redisRepo.Exists(c, "ranking_test", "hoge")
-	log.Debug("exists 2 --------------------> ", res)
+	l("exist2", res)
 
 	// expire
 	redisRepo.Set(c, "expire_test", "test")
@@ -403,13 +398,17 @@ func TestUserMisc(c *gin.Context) {
 	l("_expire_at_test", res)
 
 	// ranking
-	score, _ := redisRepo.ZScore(c, "ranking_test", "c")
+	scores := map[string]int{"a": 2, "b": 1, "c": 4, "d": 3, "e": 5}
+	redisRepo.ZAdd(c, "ranking", "f", 10)
+	redisRepo.ZAdds(c, "ranking", scores)
+
+	score, _ := redisRepo.ZScore(c, "ranking", "a")
 	l("ranking score", score)
-	rank, _ := redisRepo.ZRevRank(c, "ranking_test", "c")
+	rank, _ := redisRepo.ZRevRank(c, "ranking", "a")
 	l("now rank is", rank)
-	ranking, _ := redisRepo.ZRevRange(c, "ranking_test", rank-1, rank+1)
+	ranking, _ := redisRepo.ZRevRange(c, "ranking", rank-1, rank+1)
 	l("ranking", ranking)
-	allranking, _ := redisRepo.ZRevRangeAll(c, "ranking_test")
+	allranking, _ := redisRepo.ZRevRangeAll(c, "ranking")
 	l("ranking_all", allranking)
 
 	dir, _ := os.Getwd()
