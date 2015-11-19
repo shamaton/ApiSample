@@ -17,6 +17,8 @@ import (
 
 	"sample/logic"
 
+	"os"
+
 	log "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
@@ -382,6 +384,9 @@ func TestUserMisc(c *gin.Context) {
 	log.Debug("exists 1 --------------------> ", res)
 	res, _ = redisRepo.Exists(c, "ranking_test", "hoge")
 	log.Debug("exists 2 --------------------> ", res)
+
+	dir, _ := os.Getwd()
+	log.Debug("path : ", dir)
 
 	c.JSON(http.StatusOK, gin.H{})
 }

@@ -27,9 +27,12 @@ type User struct {
 	UpdatedAt time.Time `db:"updated_at"`
 }
 
+/**
+ * db accessor function
+ */
 /**************************************************************************************************/
 /*!
- *  リポジトリ操作オブジェクトの生成
+ *  DB操作オブジェクトの生成
  */
 /**************************************************************************************************/
 func NewUserRepo() *userRepo {
@@ -37,9 +40,6 @@ func NewUserRepo() *userRepo {
 	return &userRepo{b}
 }
 
-/**
- * Implementer
- */
 type userRepo struct {
 	baseI
 }

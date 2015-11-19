@@ -42,9 +42,6 @@ type DbTableConf struct {
 	ShardType int    `db:"shard_type"`
 }
 
-var table = "db_table_conf"
-var columns = "id, table_name, use_type, shard_type"
-
 // CACHE TEST
 var dbTableConfCache = map[string]DbTableConf{}
 
@@ -104,17 +101,28 @@ func (d *DbTableConf) IsShardTypeGroup() bool {
 }
 
 /**
- * database accessor method
+ * db accessor function
  */
-type DbTableConfRepo interface {
+/**************************************************************************************************/
+/*!
+ *  DB操作オブジェクトの生成
+ */
+/**************************************************************************************************/
+type dbTableConfRepoI interface {
 	Find(*gin.Context, string) (*DbTableConf, error)
 }
 
-func NewDbTableConfRepo() DbTableConfRepo {
-	return DbTableConfRepoImpl{}
+func NewDbTableConfRepo() dbTableConfRepoI {
+	repo := &dbTableConfRepo{
+		table:   "db_table_conf",
+		columns: "id, table_name, use_type, shard_type",
+	}
+	return repo
 }
 
-type DbTableConfRepoImpl struct {
+type dbTableConfRepo struct {
+	table   string
+	columns string
 }
 
 /**************************************************************************************************/
@@ -126,11 +134,11 @@ type DbTableConfRepoImpl struct {
  *  \return  テーブルデータ、エラー
  */
 /**************************************************************************************************/
-func (impl DbTableConfRepoImpl) Find(c *gin.Context, tableName string) (*DbTableConf, error) {
+func (this *dbTableConfRepo) Find(c *gin.Context, tableName string) (*DbTableConf, error) {
 	var err error
 
 	if len(dbTableConfCache) < 1 {
-		err = impl.makeCache(c)
+		err = this.makeCache(c)
 		if err != nil {
 			return nil, err
 		}
@@ -153,7 +161,7 @@ func (impl DbTableConfRepoImpl) Find(c *gin.Context, tableName string) (*DbTable
  *  \return  全データ、エラー
  */
 /**************************************************************************************************/
-func (impl DbTableConfRepoImpl) finds(c *gin.Context) (*[]DbTableConf, error) {
+func (this *dbTableConfRepo) finds(c *gin.Context) (*[]DbTableConf, error) {
 	var datas []DbTableConf
 
 	// ハンドル取得
@@ -164,7 +172,7 @@ func (impl DbTableConfRepoImpl) finds(c *gin.Context) (*[]DbTableConf, error) {
 	}
 
 	// user_shardを検索
-	sql, args, err := builder.Select(columns).From(table).ToSql()
+	sql, args, err := builder.Select(this.columns).From(this.table).ToSql()
 	if err != nil {
 		log.Error("query build error!!")
 		return nil, err
@@ -186,8 +194,8 @@ func (impl DbTableConfRepoImpl) finds(c *gin.Context) (*[]DbTableConf, error) {
  *  \return  エラー
  */
 /**************************************************************************************************/
-func (impl DbTableConfRepoImpl) makeCache(c *gin.Context) error {
-	allData, err := impl.finds(c)
+func (this *dbTableConfRepo) makeCache(c *gin.Context) error {
+	allData, err := this.finds(c)
 	if err != nil {
 		log.Error("db_table_conf err!!")
 		return err
