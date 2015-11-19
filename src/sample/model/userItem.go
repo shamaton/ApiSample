@@ -27,31 +27,18 @@ type UserItem struct {
 	UpdatedAt time.Time `db:"updated_at"`
 }
 
-/**
- * Interface
- */
-type UserItemRepo interface {
-	FindByPk(*gin.Context, uint64, int, ...interface{}) *UserItem
-
-	Save(*gin.Context, interface{}) error
-	Delete(*gin.Context, interface{}) error
-}
-
 /**************************************************************************************************/
 /*!
  *  リポジトリ操作オブジェクトの生成
  */
 /**************************************************************************************************/
-func NewUserItemRepo() UserItemRepo {
-	b := &base{table: "user_item"}
-	return UserItemRepoImpl{b}
+func NewUserItemRepo() *userItemRepo {
+	b := NewBase("user_item")
+	return &userItemRepo{b}
 }
 
-/**
- * Implementer
- */
-type UserItemRepoImpl struct {
-	*base
+type userItemRepo struct {
+	baseI
 }
 
 /**************************************************************************************************/
@@ -65,9 +52,9 @@ type UserItemRepoImpl struct {
  *  \return  ユーザーアイテムデータ(エラー時はnil)
  */
 /**************************************************************************************************/
-func (r UserItemRepoImpl) FindByPk(c *gin.Context, userId uint64, itemId int, options ...interface{}) *UserItem {
+func (this *userItemRepo) FindByPk(c *gin.Context, userId uint64, itemId int, options ...interface{}) *UserItem {
 	userItem := &UserItem{UserId: userId, ItemId: itemId}
-	err := r.Find(c, userItem, options...)
+	err := this.Find(c, userItem, options...)
 	if err != nil {
 		return nil
 	}
