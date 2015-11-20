@@ -9,10 +9,12 @@ import (
 )
 
 // デフォルトの期限切れ時間
-const defaultExpireSec = 5
+const defaultExpireSec = 5 * 60
 
-// カスタムな設定値を一括で管理する
-// key : expire
+/**
+ * カスタムな設定値を一括で管理する
+ * key : expire
+ */
 var customExpireMap = map[string]int64{
 //"hoge": 60,
 }
@@ -56,6 +58,15 @@ func NewCacheRepo() cacheI {
 type cacheRepo struct {
 }
 
+/**************************************************************************************************/
+/*!
+ *  キャッシュをセットする
+ *
+ *  \param   key     : 主キー
+ *  \param   members : 副キー
+ *  \return  なし
+ */
+/**************************************************************************************************/
 func (this *cacheRepo) SetCache(data interface{}, key string, members ...string) {
 	uniqueKey := this.getUniqueKey(key, members)
 
@@ -73,6 +84,15 @@ func (this *cacheRepo) SetCache(data interface{}, key string, members ...string)
 	cacheData[uniqueKey] = cache
 }
 
+/**************************************************************************************************/
+/*!
+ *  キャッシュを取得する
+ *
+ *  \param   key     : 主キー
+ *  \param   members : 副キー
+ *  \return  キャッシュ、エラー
+ */
+/**************************************************************************************************/
 func (this *cacheRepo) GetCache(key string, members ...string) (interface{}, error) {
 
 	uniqueKey := this.getUniqueKey(key, members)
@@ -82,7 +102,7 @@ func (this *cacheRepo) GetCache(key string, members ...string) (interface{}, err
 		return nil, nil
 	}
 
-	// 期限切れはエラーではない
+	// 期限切れ時は古いのを削除しておく
 	if time.Now().Unix() > cache.expireAt {
 		log.Info("cache is expire")
 		delete(cacheData, uniqueKey)
@@ -92,6 +112,17 @@ func (this *cacheRepo) GetCache(key string, members ...string) (interface{}, err
 	return cache.data, nil
 }
 
+/**************************************************************************************************/
+/*!
+ *  キャッシュを取得する。存在しない場合はcacheSetterを呼ぶ
+ *
+ *  \param   c       : コンテキスト
+ *  \param   setter  : cacheSetter
+ *  \param   key     : 主キー
+ *  \param   members : 副キー
+ *  \return  キャッシュ、エラー
+ */
+/**************************************************************************************************/
 func (this *cacheRepo) GetCacheWithSetter(c *gin.Context, setter cacheSetter, key string, members ...string) (interface{}, error) {
 	var cData interface{}
 	var err error
@@ -113,6 +144,15 @@ func (this *cacheRepo) GetCacheWithSetter(c *gin.Context, setter cacheSetter, ke
 	return cData, nil
 }
 
+/**************************************************************************************************/
+/*!
+ *  keyとmembersからユニークなキーを取得する
+ *
+ *  \param   key     : 主キー
+ *  \param   members : 副キー
+ *  \return  ユニークキー
+ */
+/**************************************************************************************************/
 func (this *cacheRepo) getUniqueKey(key string, members []string) string {
 	strs := []string{key}
 	strs = append(strs, members...)
