@@ -1,7 +1,6 @@
 package model
 
 import (
-	"errors"
 	"strings"
 	"time"
 
@@ -31,34 +30,65 @@ const (
 	local int64 = iota
 )
 
-var cacheData = cacheMap{}
-var cacheInfo = map[string]cacheInfoMap{}
+var cacheData = map[string]*cache{}
 
-// tableName_key -> {data:data}
-// tableName_key -> {expire:10, expired_at:時間}
+// デフォルトの期限切れ時間
+const defaultExpireSec = 5
 
-func (this *cacheRepo) SetCache(data interface{}, key string, member string) {
-	strs := []string{key, member}
-	uniqueKey := strings.Join(strs, "_")
-
-	// cache_info_mapを作成
-	cache_type := local
-	expire := int64(10)
-	expiredAt := time.Now().Unix() + expire
-	ci := cacheInfoMap{"type": cache_type, "expire": expire, "expired_at": expiredAt}
-	cacheInfo[uniqueKey] = ci
-
-	// data cache
-	cacheData[uniqueKey] = data
+// カスタムな設定値を一括で管理する
+// key => expire
+var customExpireMap = map[string]int64{
+//"hoge": 60,
 }
 
+type cache struct {
+	expireAt int64       //<! 期限
+	data     interface{} //<! データ
+}
+
+func (this *cacheRepo) SetCache(data interface{}, key string, member string) {
+	uniqueKey := this.getUniqueKey(key, member)
+
+	cache := new(cache)
+
+	// set expire
+	expire := int64(defaultExpireSec)
+	value, ok := customExpireMap[uniqueKey]
+	if ok {
+		expire = value
+	}
+	cache.expireAt = time.Now().Unix() + expire
+	cache.data = data
+
+	cacheData[uniqueKey] = cache
+}
+
+
+func (this *cacheRepo) GetCache(key string, member string) (interface{}, error) {
+
+	uniqueKey := this.getUniqueKey(key, member)
+	cache, ok := cacheData[uniqueKey]
+	if !ok {
+		log.Info("not found cache")
+		return nil, nil
+	}
+
+	// 期限切れはエラーではない
+	if time.Now().Unix() > cache.expireAt {
+		log.Info("cache is expire")
+		return nil, nil
+	}
+
+	return cache.data, nil
+}
+
+/*
 func (this *cacheRepo) GetCache(key string, member string) (interface{}, error) {
 
 	uniqueKey := getUniqueKey(key, member)
 	ci, isValid := cacheInfo[uniqueKey]
 	if !isValid {
 		log.Debug("not fuond cache info -------------------> ")
-		//err = errors.New("unique key ["+uniqueKey+"] is invalid!!")
 		return nil, nil
 	}
 
@@ -69,16 +99,15 @@ func (this *cacheRepo) GetCache(key string, member string) (interface{}, error) 
 		return nil, nil
 	}
 
-	// typeごとに取得
-
 	// データ取得
-	data, isValid := cacheData[uniqueKey]
+	data, isValid := _cacheData[uniqueKey]
 	if !isValid {
 		err := errors.New("unique key [" + uniqueKey + "] is invalid!!")
 		return nil, err
 	}
 	return data, nil
 }
+*/
 
 func (this *cacheRepo) GetCacheWithSetter(c *gin.Context, key string, member string, setter cacheSetter) (interface{}, error) {
 	var cData interface{}
@@ -101,7 +130,7 @@ func (this *cacheRepo) GetCacheWithSetter(c *gin.Context, key string, member str
 	return cData, nil
 }
 
-func getUniqueKey(key, member string) string {
+func (this *cacheRepo) getUniqueKey(key, member string) string {
 	strs := []string{key, member}
 	return strings.Join(strs, "_")
 }
