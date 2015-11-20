@@ -41,6 +41,7 @@ func main() {
 	var err error
 	// context
 	ctx = context.Background()
+	defer DBI.Close(ctx)
 
 	setLoggerConfig()
 
@@ -52,6 +53,7 @@ func main() {
 	ctx, err = DBI.BuildInstances(ctx)
 	if err != nil {
 		log.Critical("init DB failed!!")
+		DBI.Close(ctx)
 		os.Exit(1)
 	}
 
