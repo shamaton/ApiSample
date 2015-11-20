@@ -18,6 +18,7 @@ import (
 
 	"errors"
 
+	"github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/context"
@@ -563,7 +564,7 @@ func (this *redisRepo) Multi(c *gin.Context) error {
 
 	// save context status
 	c.Set(ckey.IsRedisTxStart, true)
-
+	seelog.Debug("start redis tx")
 	return nil
 }
 
@@ -584,6 +585,7 @@ func (this *redisRepo) Exec(c *gin.Context) (interface{}, error) {
 	// save context status
 	c.Set(ckey.IsRedisTxStart, false)
 
+	seelog.Debug("commit redis tx")
 	return reply, nil
 }
 
@@ -604,6 +606,7 @@ func (this *redisRepo) Discard(c *gin.Context) error {
 	// save context status
 	c.Set(ckey.IsRedisTxStart, false)
 
+	seelog.Debug("rollback redis tx")
 	return nil
 }
 
@@ -615,6 +618,7 @@ func (this *redisRepo) send(c *gin.Context, commandName string, args ...interfac
 
 	conn := this.getWriteConnection(c)
 	err := conn.Send(commandName, args...)
+	seelog.Debug("redis send...")
 	return err
 }
 
@@ -659,6 +663,7 @@ func (this *redisRepo) Close(c *gin.Context) error {
 	if err != nil {
 		return err
 	}
+	seelog.Debug("redis closed")
 
 	return nil
 }

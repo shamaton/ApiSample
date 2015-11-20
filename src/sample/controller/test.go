@@ -15,8 +15,6 @@ import (
 
 	"sample/logic"
 
-	"os"
-
 	log "github.com/cihub/seelog"
 
 	"github.com/gin-gonic/gin"
@@ -407,8 +405,13 @@ func TestUserMisc(c *gin.Context) {
 	rank, _ = redisRepo.ZRevRank(c, "ranking", "abbb")
 	l("now rank is", rank)
 
-	dir, _ := os.Getwd()
-	log.Debug("path : ", dir)
+	// discard
+	redisRepo.Set(c, "discard_test", 1)
+	redisRepo.Discard(c)
+
+	var discard int
+	redisRepo.Get(c, "discard_test", &discard)
+	l("discard", discard)
 
 	c.JSON(http.StatusOK, gin.H{})
 }
