@@ -835,7 +835,7 @@ func (b *base) getShardIdByShardKey(c *gin.Context, shardKey interface{}, dbTabl
 	}
 	// 検索
 	repo := NewShardRepo()
-	shardId, err = repo.findShardId(c, dbTableConf.ShardType, shardKey)
+	shardId, err = repo.FindShardId(c, dbTableConf.ShardType, shardKey)
 	if err != nil {
 		return shardId, err
 	}
