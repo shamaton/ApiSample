@@ -62,7 +62,6 @@ XX -- Only set the key if it already exist.
  */
 /**************************************************************************************************/
 func (this *redisRepo) Set(c *gin.Context, key string, value interface{}, options ...interface{}) error {
-	conn := this.getConnection(c)
 
 	// オプションチェック
 	optArgs, err := this.checkOption(this.checkSetOption, options)
@@ -99,7 +98,7 @@ func (this *redisRepo) Set(c *gin.Context, key string, value interface{}, option
 	args = append(args, optArgs...)
 
 	// SET
-	_, err = conn.Do("SET", args...)
+	err = this.send(c, "SET", args...)
 	if err != nil {
 		return err
 	}
@@ -152,7 +151,7 @@ func (this *redisRepo) checkSetOption(option RedisOption) ([]interface{}, error)
  */
 /**************************************************************************************************/
 func (this *redisRepo) Get(c *gin.Context, key string, holder interface{}) error {
-	conn := this.getConnection(c)
+	conn := this.getReadConnection(c)
 
 	ref := reflect.ValueOf(holder).Elem()
 
@@ -200,7 +199,7 @@ func (this *redisRepo) Get(c *gin.Context, key string, holder interface{}) error
  */
 /**************************************************************************************************/
 func (this *redisRepo) Exists(c *gin.Context, key string, keys ...string) (bool, error) {
-	conn := this.getConnection(c)
+	conn := this.getReadConnection(c)
 
 	// keys...で渡せないのでinterfaceに入れなおす
 	var is []interface{}
@@ -233,15 +232,15 @@ func (this *redisRepo) Exists(c *gin.Context, key string, keys ...string) (bool,
  *  \return  成功時true、失敗時エラー
  */
 /**************************************************************************************************/
-func (this *redisRepo) Expire(c *gin.Context, key string, second int) (bool, error) {
-	conn := this.getConnection(c)
+func (this *redisRepo) Expire(c *gin.Context, key string, second int) error {
 
-	v, err := redis.Bool(conn.Do("EXPIRE", key, second))
+	err := this.send(c, "EXPIRE", key, second)
+
 	if err != nil {
-		return false, err
+		return err
 	}
 
-	return v, nil
+	return nil
 }
 
 /**************************************************************************************************/
@@ -254,15 +253,15 @@ func (this *redisRepo) Expire(c *gin.Context, key string, second int) (bool, err
  *  \return  成功時true、失敗時エラー
  */
 /**************************************************************************************************/
-func (this *redisRepo) ExpireAt(c *gin.Context, key string, t time.Time) (bool, error) {
-	conn := this.getConnection(c)
+func (this *redisRepo) ExpireAt(c *gin.Context, key string, t time.Time) error {
 
-	v, err := redis.Bool(conn.Do("EXPIREAT", key, t.Unix()))
+	err := this.send(c, "EXPIREAT", key, t.Unix())
+
 	if err != nil {
-		return false, err
+		return err
 	}
 
-	return v, nil
+	return nil
 }
 
 /**************************************************************************************************/
@@ -279,25 +278,24 @@ func (this *redisRepo) ExpireAt(c *gin.Context, key string, t time.Time) (bool, 
  *  \return  失敗時エラー
  */
 /**************************************************************************************************/
-func (this *redisRepo) ZAdd(c *gin.Context, key string, member string, score int, options ...interface{}) (int, error) {
-	conn := this.getConnection(c)
+func (this *redisRepo) ZAdd(c *gin.Context, key string, member string, score int, options ...interface{}) error {
 
 	// オプションチェック
 	optArgs, err := this.checkOption(this.checkZAddOption, options)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
 	args := []interface{}{key}
 	args = append(args, optArgs...)
 	args = append(args, score, member)
 
-	v, err := redis.Int(conn.Do("ZADD", args...))
+	err = this.send(c, "ZADD", args...)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
-	return v, nil
+	return nil
 }
 
 /**************************************************************************************************/
@@ -313,13 +311,12 @@ func (this *redisRepo) ZAdd(c *gin.Context, key string, member string, score int
  *  \return  addされた数、失敗時エラー
  */
 /**************************************************************************************************/
-func (this *redisRepo) ZAdds(c *gin.Context, key string, scoreMap map[string]int, options ...interface{}) (int, error) {
-	conn := this.getConnection(c)
+func (this *redisRepo) ZAdds(c *gin.Context, key string, scoreMap map[string]int, options ...interface{}) error {
 
 	// オプションチェック
 	optArgs, err := this.checkOption(this.checkZAddOption, options)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
 	var args []interface{}
@@ -332,12 +329,12 @@ func (this *redisRepo) ZAdds(c *gin.Context, key string, scoreMap map[string]int
 		args = append(args, score, member)
 	}
 
-	v, err := redis.Int(conn.Do("ZADD", args...))
+	err = this.send(c, "ZADD", args...)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
-	return v, nil
+	return nil
 }
 
 /**************************************************************************************************/
@@ -383,7 +380,7 @@ func (this *redisRepo) checkZAddOption(option RedisOption) ([]interface{}, error
  */
 /**************************************************************************************************/
 func (this *redisRepo) ZRevRange(c *gin.Context, key string, start int, stop int) ([]map[string]int, error) {
-	conn := this.getConnection(c)
+	conn := this.getReadConnection(c)
 
 	values, err := redis.Values(conn.Do("ZREVRANGE", key, start, stop, "WITHSCORES"))
 	if err != nil {
@@ -440,7 +437,7 @@ func (this *redisRepo) ZRevRangeAll(c *gin.Context, key string) ([]map[string]in
  */
 /**************************************************************************************************/
 func (this *redisRepo) ZRevRank(c *gin.Context, key string, member string) (int, error) {
-	conn := this.getConnection(c)
+	conn := this.getReadConnection(c)
 
 	v, err := redis.Int(conn.Do("ZREVRANK", key, member))
 	if err != nil {
@@ -466,7 +463,7 @@ func (this *redisRepo) ZRevRank(c *gin.Context, key string, member string) (int,
  */
 /**************************************************************************************************/
 func (this *redisRepo) ZScore(c *gin.Context, key string, member string) (int, error) {
-	conn := this.getConnection(c)
+	conn := this.getReadConnection(c)
 
 	v, err := redis.Int(conn.Do("ZSCORE", key, member))
 	if err != nil {
@@ -519,9 +516,149 @@ func (this *redisRepo) checkOption(f optionFunc, options []interface{}) ([]inter
  *  \return  redisへのコネクション
  */
 /**************************************************************************************************/
-func (this *redisRepo) getConnection(c *gin.Context) redis.Conn {
-	ctx := c.MustGet(ckey.GContext).(context.Context)
-	pool := ctx.Value(ckey.MemdPool).(*redis.Pool)
-	conn := pool.Get()
+func (this *redisRepo) getConnection(c *gin.Context, key string) redis.Conn {
+	var conn redis.Conn
+	i, ok := c.Get(key)
+
+	// ない場合取得する
+	if !ok {
+		ctx := c.MustGet(ckey.GContext).(context.Context)
+		pool := ctx.Value(ckey.MemdPool).(*redis.Pool)
+		conn = pool.Get()
+		c.Set(key, conn)
+	} else {
+		conn = i.(redis.Conn)
+	}
 	return conn
+}
+
+func (this *redisRepo) getReadConnection(c *gin.Context) redis.Conn {
+	return this.getConnection(c, ckey.RedisRConn)
+}
+
+func (this *redisRepo) getWriteConnection(c *gin.Context) redis.Conn {
+	return this.getConnection(c, ckey.RedisWconn)
+}
+
+/**************************************************************************************************/
+/*!
+ *  トランザクション開始
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
+func (this *redisRepo) Multi(c *gin.Context) error {
+	// すでに開始している場合は何もしない
+	if this.isTxStart(c) {
+		return nil
+	}
+
+	conn := this.getWriteConnection(c)
+
+	err := conn.Send("MULTI")
+	if err != nil {
+		return err
+	}
+
+	// save context status
+	c.Set(ckey.IsRedisTxStart, true)
+
+	return nil
+}
+
+// 更新系コマンド全実行
+func (this *redisRepo) Exec(c *gin.Context) (interface{}, error) {
+	// 開始してない場合は何もしない
+	if !this.isTxStart(c) {
+		return nil, nil
+	}
+
+	conn := this.getWriteConnection(c)
+
+	reply, err := conn.Do("EXEC")
+	if err != nil {
+		return reply, err
+	}
+
+	// save context status
+	c.Set(ckey.IsRedisTxStart, false)
+
+	return reply, nil
+}
+
+// コマンドキューの破棄
+func (this *redisRepo) Discard(c *gin.Context) error {
+	// 開始してない場合は何もしない
+	if !this.isTxStart(c) {
+		return nil
+	}
+
+	conn := this.getWriteConnection(c)
+
+	_, err := conn.Do("DISCARD")
+	if err != nil {
+		return err
+	}
+
+	// save context status
+	c.Set(ckey.IsRedisTxStart, false)
+
+	return nil
+}
+
+func (this *redisRepo) send(c *gin.Context, commandName string, args ...interface{}) error {
+	// トランザクションを開始してない場合、開始する
+	if !this.isTxStart(c) {
+		this.Multi(c)
+	}
+
+	conn := this.getWriteConnection(c)
+	err := conn.Send(commandName, args...)
+	return err
+}
+
+func (this *redisRepo) isTxStart(c *gin.Context) bool {
+	// コンテキストにあるか確認
+	i, ok := c.Get(ckey.IsRedisTxStart)
+	if ok && i != nil {
+		return i.(bool)
+	}
+	// なければfalse
+	return false
+}
+
+/**************************************************************************************************/
+/*!
+ *  クローズ処理
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
+func (this *redisRepo) Close(c *gin.Context) error {
+
+	// クローズ処理
+	closeFunc := func(key string) error {
+		i, ok := c.Get(key)
+		if ok {
+			conn := i.(redis.Conn)
+			err := conn.Close()
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	err := closeFunc(ckey.RedisRConn)
+	if err != nil {
+		return err
+	}
+	err = closeFunc(ckey.RedisWconn)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

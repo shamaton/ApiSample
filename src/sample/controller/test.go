@@ -340,57 +340,59 @@ func TestUserMisc(c *gin.Context) {
 	}
 
 	redisRepo := logic.NewRedisRepo()
-	redisRepo.Set(c, "test_key", 777)
-	redisRepo.Set(c, "test_key2", 1234)
 
-	option := logic.RedisOption{"NX": true, "EX": 10}
-	err := redisRepo.Set(c, "test_key3", "logic test", option)
-	log.Error(err)
+	// 期限切れの場合もある
+	var oldb string
+	redisRepo.Get(c, "test_key3", &oldb)
+	l("old_b", oldb)
+
+	// set
+	redisRepo.Set(c, "test_key1", 777)
+	redisRepo.Set(c, "test_key2", 1234)
+	redisRepo.Set(c, "test_key3", "logic test", logic.RedisOption{"NX": true, "EX": 10})
 
 	user := &model.User{Id: 777, Name: "hoge", Score: 123, CreatedAt: time.Now()}
 	redisRepo.Set(c, "test_key4", user)
 
+	// 一旦exec
+	redisRepo.Exec(c)
+
+	// getしてみる
 	var t int
-	redisRepo.Get(c, "test_key", &t)
-	l("t", t)
-
 	var a uint16
-	redisRepo.Get(c, "test_key2", &a)
-	l("a", a)
-
 	var b string
-	redisRepo.Get(c, "test_key3", &b)
-	l("b", b)
-
 	var cc model.User
+	redisRepo.Get(c, "test_key1", &t)
+	redisRepo.Get(c, "test_key2", &a)
+	redisRepo.Get(c, "test_key3", &b)
 	redisRepo.Get(c, "test_key4", &cc)
+	l("t", t)
+	l("a", a)
+	l("b", b)
 	l("c", cc)
 
 	// exists
-	res, _ := redisRepo.Exists(c, "ranking_test")
+	res, _ := redisRepo.Exists(c, "test_key1")
 	l("exist1", res)
-	res, _ = redisRepo.Exists(c, "ranking_test", "hoge")
+	res, _ = redisRepo.Exists(c, "test_key1", "hoge")
 	l("exist2", res)
 
 	// expire
 	redisRepo.Set(c, "expire_test", "test")
-	res, _ = redisRepo.Expire(c, "expire_test", 10)
-	l("expire_test", res)
-	res, _ = redisRepo.Expire(c, "_expire_test", 10)
-	l("_expire_test", res)
+	redisRepo.Expire(c, "expire_test", 10)
 
 	// expire_at
 	expire_at := time.Now().Add(10 * time.Second)
 	redisRepo.Set(c, "expire_at_test", "test")
-	res, _ = redisRepo.ExpireAt(c, "expire_at_test", expire_at)
-	l("expire_at_test", res)
-	res, _ = redisRepo.ExpireAt(c, "_expire_at_test", expire_at)
-	l("_expire_at_test", res)
+	redisRepo.ExpireAt(c, "expire_at_test", expire_at)
 
 	// ranking
 	scores := map[string]int{"a": 2, "b": 1, "c": 4, "d": 3, "e": 5}
-	redisRepo.ZAdd(c, "ranking", "f", 10, option)
-	redisRepo.ZAdds(c, "ranking", scores, option)
+	redisRepo.ZAdd(c, "ranking", "f", 10, logic.RedisOption{"NX": true})
+	redisRepo.ZAdds(c, "ranking", scores)
+
+	// commit
+	redisRepo.Exec(c)
 
 	score, _ := redisRepo.ZScore(c, "ranking", "a")
 	l("ranking score", score)
@@ -401,6 +403,7 @@ func TestUserMisc(c *gin.Context) {
 	allranking, _ := redisRepo.ZRevRangeAll(c, "ranking")
 	l("ranking_all", allranking)
 
+	// 存在しないキーではランクを0で返す
 	rank, _ = redisRepo.ZRevRank(c, "ranking", "abbb")
 	l("now rank is", rank)
 

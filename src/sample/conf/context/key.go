@@ -32,3 +32,12 @@ const (
 
 	SlaveIndex = "slaveIndex"
 )
+
+/**
+ * リクエストコンテキスト
+ */
+const (
+	RedisRConn     = "RedisRConn"
+	RedisWconn     = "RedisWconn"
+	IsRedisTxStart = "IsRedisTxStart"
+)

@@ -25,6 +25,7 @@ import (
 	"sample/DBI"
 	ckey "sample/conf/context"
 	"sample/conf/gameConf"
+	"sample/logic"
 )
 
 // global
@@ -109,6 +110,7 @@ func Custom() gin.HandlerFunc {
 		// リクエスト前処理
 		defer log.Flush()
 		defer DBI.RollBack(c)
+		defer logic.NewRedisRepo().Close(c)
 
 		// ランダムシード
 		rand.Seed(time.Now().UnixNano())
