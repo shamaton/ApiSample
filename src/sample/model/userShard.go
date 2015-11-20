@@ -140,7 +140,7 @@ func (this *userShardRepo) FindByUserId(c *gin.Context, userId interface{}, opti
 			log.Info("not found user shard id")
 		}
 	} else {
-		cv, err := this.GetCacheWithSetter(c, this.table, "all", this.cacheSetter)
+		cv, err := this.GetCacheWithSetter(c, this.cacheSetter, this.table, "all")
 		if err != nil {
 			return nil, err
 		}
