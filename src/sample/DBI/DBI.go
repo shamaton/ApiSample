@@ -63,32 +63,18 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
 
 	gc := ctx.Value(ckey.GameConfig).(*gameConf.GameConfig)
 
-	// gorpのオブジェクトを取得
-	getGorp := func(dbConf gameConf.DbConfig, host, port, dbName string) (*gorp.DbMap, error) {
-
-		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8&parseTime=true&loc=Local", dbConf.User, dbConf.Pass, host, port, dbName)
-
-		db, err := sql.Open("mysql", dsn)
-		if err != nil {
-			log.Critical(err)
-		}
-
-		// construct a gorp DbMap
-		dbmap := &gorp.DbMap{Db: db, Dialect: gorp.MySQLDialect{"InnoDB", "UTF8"}}
-		return dbmap, err
-	}
-
 	// make shards
 	for i := 0; i < gc.Db.Shard; i++ {
 		shardIds = append(shardIds, i+1)
 	}
 
 	// master - master
-	masterW, err := getGorp(gc.Db, gc.Server.Host, gc.Server.Port, "game_master")
+	masterW, err := getDbMap(gc.Db, gc.Server.Host, gc.Server.Port, "game_master")
 	if err != nil {
 		log.Critical("master : game_master setup failed!!")
 		return ctx, err
 	}
+	ctx = context.WithValue(ctx, ckey.DbMasterW, masterW)
 
 	// master - shard
 	var shardWMap = map[int]*gorp.DbMap{}
@@ -97,7 +83,7 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
 		dbName := "game_shard_" + strconv.Itoa(shardId)
 
 		// mapping
-		shardWMap[shardId], err = getGorp(
+		shardWMap[shardId], err = getDbMap(
 			gc.Db,
 			gc.Server.Host,
 			gc.Server.Port,
@@ -109,16 +95,17 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
 			return ctx, err
 		}
 	}
+	ctx = context.WithValue(ctx, ckey.DbShardWMap, shardWMap)
 
 	// read-only database
-	// slave
+	// slave master
 	var masterRs []*gorp.DbMap
 	var shardRMaps []map[int]*gorp.DbMap
-	for slave_index, slaveConf := range gc.Server.Slave {
+	for _, slaveConf := range gc.Server.Slave {
 		///////////////////////////////////
 		// MASTER
 		// mapping
-		masterR, err := getGorp(
+		masterR, err := getDbMap(
 			gc.Db,
 			slaveConf.Host,
 			slaveConf.Port,
@@ -138,6 +125,11 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
 
 		// add slave masters
 		masterRs = append(masterRs, masterR)
+	}
+	ctx = context.WithValue(ctx, ckey.DbMasterRs, masterRs)
+
+	// slave shard
+	for slave_index, slaveConf := range gc.Server.Slave {
 
 		///////////////////////////////////
 		// SHARD
@@ -148,7 +140,7 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
 			dbName := "game_shard_" + strconv.Itoa(shardId)
 
 			// mapping
-			db, err := getGorp(
+			db, err := getDbMap(
 				gc.Db,
 				slaveConf.Host,
 				slaveConf.Port,
@@ -174,17 +166,32 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
 			slaveWeights = append(slaveWeights, slave_index)
 		}
 	}
-
-	// contextに設定
-	ctx = context.WithValue(ctx, ckey.DbMasterW, masterW)
-	ctx = context.WithValue(ctx, ckey.DbShardWMap, shardWMap)
-
-	ctx = context.WithValue(ctx, ckey.DbMasterRs, masterRs)
 	ctx = context.WithValue(ctx, ckey.DbShardRMaps, shardRMaps)
 
 	// TODO:BAK MODE
 
 	return ctx, err
+}
+
+/**************************************************************************************************/
+/*!
+ *  DBマップを取得する
+ *
+ *  \return  使用するslaveのindex
+ */
+/**************************************************************************************************/
+func getDbMap(dbConf gameConf.DbConfig, host, port, dbName string) (*gorp.DbMap, error) {
+
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8&parseTime=true&loc=Local", dbConf.User, dbConf.Pass, host, port, dbName)
+
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		log.Critical(err)
+	}
+
+	// construct a gorp DbMap
+	dbmap := &gorp.DbMap{Db: db, Dialect: gorp.MySQLDialect{"InnoDB", "UTF8"}}
+	return dbmap, err
 }
 
 /**************************************************************************************************/
