@@ -42,9 +42,6 @@ type DbTableConf struct {
 	ShardType int    `db:"shard_type"`
 }
 
-// CACHE TEST
-var dbTableConfCache = map[string]DbTableConf{}
-
 /**
  * interface
  */
@@ -58,6 +55,7 @@ type dbTableConfRepoI interface {
 type dbTableConfRepo struct {
 	table   string
 	columns string
+	cacheI
 }
 
 /**************************************************************************************************/
@@ -66,9 +64,11 @@ type dbTableConfRepo struct {
  */
 /**************************************************************************************************/
 func NewDbTableConfRepo() dbTableConfRepoI {
+	cacheRepo := NewCacheRepo()
 	repo := &dbTableConfRepo{
 		table:   "db_table_conf",
 		columns: "id, table_name, use_type, shard_type",
+		cacheI:  cacheRepo,
 	}
 	return repo
 }
@@ -85,14 +85,13 @@ func NewDbTableConfRepo() dbTableConfRepoI {
 func (this *dbTableConfRepo) Find(c *gin.Context, tableName string) (*DbTableConf, error) {
 	var err error
 
-	if len(dbTableConfCache) < 1 {
-		err = this.makeCache(c)
-		if err != nil {
-			return nil, err
-		}
+	cv, err := this.GetCacheWithSetter(c, this.cacheSetter, this.table, "all")
+	if err != nil {
+		return nil, err
 	}
+	allData := cv.(map[string]DbTableConf)
 
-	data, isValid := dbTableConfCache[tableName]
+	data, isValid := allData[tableName]
 	if !isValid {
 		err = errors.New("not found db_table_conf record!!")
 		return nil, err
@@ -136,29 +135,31 @@ func (this *dbTableConfRepo) finds(c *gin.Context) (*[]DbTableConf, error) {
 
 /**************************************************************************************************/
 /*!
- *  キャッシュを生成する
+ *  キャッシュを生成してセット
  *
- *  \param   c : コンテキスト
- *  \return  エラー
+ *  \param   c         : コンテキスト
+ *  \return  cacheGetしたものと同等のデータ、エラー
  */
 /**************************************************************************************************/
-func (this *dbTableConfRepo) makeCache(c *gin.Context) error {
+func (this *dbTableConfRepo) cacheSetter(c *gin.Context) (interface{}, error) {
 	allData, err := this.finds(c)
 	if err != nil {
-		log.Error("db_table_conf err!!")
-		return err
+		return nil, err
 	}
 	if len(*allData) < 1 {
 		err = errors.New("db_table_conf is empty!!")
 		log.Error(err)
-		return err
+		return nil, err
 	}
 
-	// mapを生成する
+	// マップ生成
+	dataMap := map[string]DbTableConf{}
 	for _, v := range *allData {
-		dbTableConfCache[v.TableName] = v
+		dataMap[v.TableName] = v
 	}
-	return err
+	this.SetCache(dataMap, this.table, "all")
+
+	return dataMap, nil
 }
 
 /**

@@ -25,6 +25,7 @@ import (
 	"sample/DBI"
 	ckey "sample/conf/context"
 	"sample/conf/gameConf"
+	"sample/logic"
 )
 
 // global
@@ -41,6 +42,7 @@ func main() {
 	var err error
 	// context
 	ctx = context.Background()
+	defer DBI.Close(ctx)
 
 	setLoggerConfig()
 
@@ -52,6 +54,7 @@ func main() {
 	ctx, err = DBI.BuildInstances(ctx)
 	if err != nil {
 		log.Critical("init DB failed!!")
+		DBI.Close(ctx)
 		os.Exit(1)
 	}
 
@@ -106,6 +109,8 @@ func Custom() gin.HandlerFunc {
 
 		// リクエスト前処理
 		defer log.Flush()
+		defer DBI.RollBack(c)
+		defer logic.NewRedisRepo().Close(c)
 
 		// ランダムシード
 		rand.Seed(time.Now().UnixNano())
