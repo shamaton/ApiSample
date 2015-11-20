@@ -58,7 +58,7 @@ func TestUserSelect(c *gin.Context) {
 
 	// FIND(USE OPTION)
 	var option = model.Option{"mode": db.MODE_W}
-	user = userRepo.FindById(c, 3, option)
+	user = userRepo.FindById(c, 2, option)
 	if user == nil {
 		errorJson(c, "user find_by_id(use option) error", nil)
 		return
