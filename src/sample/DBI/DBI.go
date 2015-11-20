@@ -69,70 +69,127 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
 	}
 
 	// master - master
-	masterW, err := getDbMap(gc.Db, gc.Server.Host, gc.Server.Port, "game_master")
-	if err != nil {
-		log.Critical("master : game_master setup failed!!")
-		return ctx, err
-	}
+	masterW, err := getWriteMaster(gc)
 	ctx = context.WithValue(ctx, ckey.DbMasterW, masterW)
 
 	// master - shard
-	var shardWMap = map[int]*gorp.DbMap{}
+	shardWMap, err := getWriteShard(gc)
+	ctx = context.WithValue(ctx, ckey.DbShardWMap, shardWMap)
+
+	// slave master
+	masterRs, err := getReadOnlyMaster(gc)
+	ctx = context.WithValue(ctx, ckey.DbMasterRs, masterRs)
+
+	// slave shard
+	shardRMaps, err := getReadOnlyShard(gc)
+	ctx = context.WithValue(ctx, ckey.DbShardRMaps, shardRMaps)
+
+	// slaveの選択比重
+	for slave_index, slaveConf := range gc.Server.Slave {
+		for i := 0; i < slaveConf.Weight; i++ {
+			slaveWeights = append(slaveWeights, slave_index)
+		}
+	}
+
+	// TODO:BAK MODE
+
+	return ctx, err
+}
+
+/**************************************************************************************************/
+/*!
+ *  書き込み可能マスタDBへの接続
+ *
+ *  \param  gc : game config
+ *  \return  DbMap, エラー
+ */
+/**************************************************************************************************/
+func getWriteMaster(gc *gameConf.GameConfig) (*gorp.DbMap, error) {
+	dbMap, err := getDbMap(gc.Db, gc.Server.Host, gc.Server.Port, "game_master")
+	if err != nil {
+		log.Critical("master : game_master setup failed!!")
+		return nil, err
+	}
+	return dbMap, nil
+}
+
+/**************************************************************************************************/
+/*!
+ *  書き込み可能シャードDBへの接続
+ *
+ *  \param  gc : game config
+ *  \return  map[shard_id]DbMap, エラー
+ */
+/**************************************************************************************************/
+func getWriteShard(gc *gameConf.GameConfig) (map[int]*gorp.DbMap, error) {
+
+	var shardMap = map[int]*gorp.DbMap{}
+	var err error
+
 	for _, shardId := range shardIds {
 		// database
 		dbName := "game_shard_" + strconv.Itoa(shardId)
 
 		// mapping
-		shardWMap[shardId], err = getDbMap(
-			gc.Db,
-			gc.Server.Host,
-			gc.Server.Port,
-			dbName)
+		shardMap[shardId], err = getDbMap(gc.Db, gc.Server.Host, gc.Server.Port, dbName)
 
 		// error
 		if err != nil {
 			log.Critical("master : " + dbName + " setup failed!!")
-			return ctx, err
+			// TODO:-----------
+			return nil, err
 		}
 	}
-	ctx = context.WithValue(ctx, ckey.DbShardWMap, shardWMap)
+	return shardMap, nil
+}
 
-	// read-only database
-	// slave master
+/**************************************************************************************************/
+/*!
+ *  読み取り専用マスタDBへの接続
+ *
+ *  \param  gc : game config
+ *  \return  [slave_index]DbMap, エラー
+ */
+/**************************************************************************************************/
+func getReadOnlyMaster(gc *gameConf.GameConfig) ([]*gorp.DbMap, error) {
+
 	var masterRs []*gorp.DbMap
-	var shardRMaps []map[int]*gorp.DbMap
 	for _, slaveConf := range gc.Server.Slave {
-		///////////////////////////////////
-		// MASTER
 		// mapping
-		masterR, err := getDbMap(
-			gc.Db,
-			slaveConf.Host,
-			slaveConf.Port,
-			"game_master")
+		masterR, err := getDbMap(gc.Db, slaveConf.Host, slaveConf.Port, "game_master")
 
 		// error
 		if err != nil {
 			log.Critical("slave : game_master setup failed!!")
-			return ctx, err
+			return nil, err
 		}
 
+		// SET READ ONLY
 		_, err = masterR.Exec("SET TRANSACTION READ ONLY")
 		if err != nil {
 			log.Critical("slave : game_master transaction setting failed!!")
-			return ctx, err
+			return nil, err
 		}
 
 		// add slave masters
 		masterRs = append(masterRs, masterR)
 	}
-	ctx = context.WithValue(ctx, ckey.DbMasterRs, masterRs)
+	return masterRs, nil
+}
 
-	// slave shard
-	for slave_index, slaveConf := range gc.Server.Slave {
+/**************************************************************************************************/
+/*!
+ *  読み取り専用シャードDBへの接続
+ *
+ *  \param  gc : game config
+ *  \return  [slave_index]map[shard_id]DbMap, エラー
+ */
+/**************************************************************************************************/
+func getReadOnlyShard(gc *gameConf.GameConfig) ([]map[int]*gorp.DbMap, error) {
 
-		///////////////////////////////////
-		// SHARD
+	var shardMaps []map[int]*gorp.DbMap
+	for _, slaveConf := range gc.Server.Slave {
+
 		var shardMap = map[int]*gorp.DbMap{}
 
 		for _, shardId := range shardIds {
@@ -149,28 +206,20 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
 			// error
 			if err != nil {
 				log.Critical("slave : " + dbName + " setup failed!!")
-				return ctx, err
+				return nil, err
 			}
 
 			_, err = db.Exec("SET TRANSACTION READ ONLY")
 			if err != nil {
 				log.Critical("slave : " + dbName + " transaction setting failed!!")
-				return ctx, err
+				return nil, err
 			}
 			shardMap[shardId] = db
 		}
-		shardRMaps = append(shardRMaps, shardMap)
+		shardMaps = append(shardMaps, shardMap)
 
-		// slaveの選択比重
-		for i := 0; i < slaveConf.Weight; i++ {
-			slaveWeights = append(slaveWeights, slave_index)
-		}
 	}
-	ctx = context.WithValue(ctx, ckey.DbShardRMaps, shardRMaps)
-
-	// TODO:BAK MODE
-
-	return ctx, err
+	return shardMaps, nil
 }
 
 /**************************************************************************************************/
@@ -187,11 +236,12 @@ func getDbMap(dbConf gameConf.DbConfig, host, port, dbName string) (*gorp.DbMap,
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		log.Critical(err)
+		return nil, err
 	}
 
 	// construct a gorp DbMap
 	dbmap := &gorp.DbMap{Db: db, Dialect: gorp.MySQLDialect{"InnoDB", "UTF8"}}
-	return dbmap, err
+	return dbmap, nil
 }
 
 /**************************************************************************************************/
