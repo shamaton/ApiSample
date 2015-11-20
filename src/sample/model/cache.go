@@ -6,12 +6,15 @@ import (
 	"time"
 
 	log "github.com/cihub/seelog"
+	"github.com/gin-gonic/gin"
 )
 
+type cacheSetter func(*gin.Context) (interface{}, error)
 
 type cacheI interface {
-SetCache(interface{}, string, string)
+	SetCache(interface{}, string, string)
 	GetCache(string, string) (interface{}, error)
+	GetCacheWithSetter(*gin.Context, string, string, cacheSetter) (interface{}, error)
 }
 
 func NewCacheRepo() cacheI {
@@ -19,7 +22,6 @@ func NewCacheRepo() cacheI {
 }
 
 type cacheRepo struct {
-
 }
 
 type cacheMap map[string]interface{}
@@ -76,6 +78,27 @@ func (this *cacheRepo) GetCache(key string, member string) (interface{}, error) 
 		return nil, err
 	}
 	return data, nil
+}
+
+func (this *cacheRepo) GetCacheWithSetter(c *gin.Context, key string, member string, setter cacheSetter) (interface{}, error) {
+	var cData interface{}
+	var err error
+
+	// 取得してみる
+	cData, err = this.GetCache(key, member)
+	if err != nil {
+		return nil, err
+	}
+
+	// データなしや期限切れの場合
+	if cData == nil {
+		cData, err = setter(c)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return cData, nil
 }
 
 func getUniqueKey(key, member string) string {

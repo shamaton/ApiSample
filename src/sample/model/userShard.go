@@ -140,15 +140,9 @@ func (this *userShardRepo) FindByUserId(c *gin.Context, userId interface{}, opti
 			log.Info("not found user shard id")
 		}
 	} else {
-		cv, err := this.GetCache(this.table, "all")
+		cv, err := this.GetCacheWithSetter(c, this.table, "all", this.cacheSetter)
 		if err != nil {
 			return nil, err
-		}
-		if cv == nil {
-			cv, err = this.makeCache(c)
-			if err != nil {
-				return nil, err
-			}
 		}
 		allData := cv.(map[int]UserShard)
 		userShard = allData[int(userId.(uint64))]
@@ -165,9 +159,9 @@ func (this *userShardRepo) FindByUserId(c *gin.Context, userId interface{}, opti
  *  \return  全データ、エラー
  */
 /**************************************************************************************************/
-func (this *userShardRepo) finds(c *gin.Context) (*[]UserShard, error) {
+func (this *userShardRepo) finds(c *gin.Context, mode string) (*[]UserShard, error) {
 	// ハンドル取得
-	conn, err := DBI.GetDBMasterConnection(c, DBI.MODE_R)
+	conn, err := DBI.GetDBMasterConnection(c, mode)
 	if err != nil {
 		log.Error("not found master connection!!")
 		return nil, err
@@ -191,14 +185,14 @@ func (this *userShardRepo) finds(c *gin.Context) (*[]UserShard, error) {
 
 /**************************************************************************************************/
 /*!
- *  キャッシュ生成
+ *  キャッシュを生成してセット
  *
  *  \param   c         : コンテキスト
  *  \return  cacheGetしたものと同等のデータ、エラー
  */
 /**************************************************************************************************/
-func (this *userShardRepo) makeCache(c *gin.Context) (interface{}, error) {
-	allData, err := this.finds(c)
+func (this *userShardRepo) cacheSetter(c *gin.Context) (interface{}, error) {
+	allData, err := this.finds(c, DBI.MODE_R)
 	if err != nil {
 		return nil, err
 	}
