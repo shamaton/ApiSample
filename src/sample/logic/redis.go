@@ -18,7 +18,6 @@ import (
 
 	"errors"
 
-	"github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/context"
@@ -511,6 +510,30 @@ func (this *redisRepo) checkOption(f optionFunc, options []interface{}) ([]inter
 
 /**************************************************************************************************/
 /*!
+ *  読み込み用コネクションの取得
+ *
+ *  \param   c : コンテキスト
+ *  \return  コネクション
+ */
+/**************************************************************************************************/
+func (this *redisRepo) getReadConnection(c *gin.Context) redis.Conn {
+	return this.getConnection(c, ckey.RedisRConn)
+}
+
+/**************************************************************************************************/
+/*!
+ *  書き込み用コネクションの取得
+ *
+ *  \param   c : コンテキスト
+ *  \return  コネクション
+ */
+/**************************************************************************************************/
+func (this *redisRepo) getWriteConnection(c *gin.Context) redis.Conn {
+	return this.getConnection(c, ckey.RedisWconn)
+}
+
+/**************************************************************************************************/
+/*!
  *  redisへのコネクションを取得する
  *
  *  \param   c : コンテキスト
@@ -531,14 +554,6 @@ func (this *redisRepo) getConnection(c *gin.Context, key string) redis.Conn {
 		conn = i.(redis.Conn)
 	}
 	return conn
-}
-
-func (this *redisRepo) getReadConnection(c *gin.Context) redis.Conn {
-	return this.getConnection(c, ckey.RedisRConn)
-}
-
-func (this *redisRepo) getWriteConnection(c *gin.Context) redis.Conn {
-	return this.getConnection(c, ckey.RedisWconn)
 }
 
 /**************************************************************************************************/
@@ -564,11 +579,17 @@ func (this *redisRepo) Multi(c *gin.Context) error {
 
 	// save context status
 	c.Set(ckey.IsRedisTxStart, true)
-	seelog.Debug("start redis tx")
 	return nil
 }
 
-// 更新系コマンド全実行
+/**************************************************************************************************/
+/*!
+ *  更新系コマンド全実行
+ *
+ *  \param   c : コンテキスト
+ *  \return  実行結果、エラー
+ */
+/**************************************************************************************************/
 func (this *redisRepo) Exec(c *gin.Context) (interface{}, error) {
 	// 開始してない場合は何もしない
 	if !this.isTxStart(c) {
@@ -585,11 +606,17 @@ func (this *redisRepo) Exec(c *gin.Context) (interface{}, error) {
 	// save context status
 	c.Set(ckey.IsRedisTxStart, false)
 
-	seelog.Debug("commit redis tx")
 	return reply, nil
 }
 
-// コマンドキューの破棄
+/**************************************************************************************************/
+/*!
+ *  コマンドキューの破棄
+ *
+ *  \param   c : コンテキスト
+ *  \return  エラー
+ */
+/**************************************************************************************************/
 func (this *redisRepo) Discard(c *gin.Context) error {
 	// 開始してない場合は何もしない
 	if !this.isTxStart(c) {
@@ -606,10 +633,19 @@ func (this *redisRepo) Discard(c *gin.Context) error {
 	// save context status
 	c.Set(ckey.IsRedisTxStart, false)
 
-	seelog.Debug("rollback redis tx")
 	return nil
 }
 
+/**************************************************************************************************/
+/*!
+ *  Send処理（レコード書き換えコマンドはこれを使う）
+ *
+ *  \param   c           : コンテキスト
+ *  \param   commandName : redisコマンド
+ *  \param   args        : コマンドに応じた値
+ *  \return  エラー
+ */
+/**************************************************************************************************/
 func (this *redisRepo) send(c *gin.Context, commandName string, args ...interface{}) error {
 	// トランザクションを開始してない場合、開始する
 	if !this.isTxStart(c) {
@@ -618,10 +654,17 @@ func (this *redisRepo) send(c *gin.Context, commandName string, args ...interfac
 
 	conn := this.getWriteConnection(c)
 	err := conn.Send(commandName, args...)
-	seelog.Debug("redis send...")
 	return err
 }
 
+/**************************************************************************************************/
+/*!
+ *  トランザクション実行中か
+ *
+ *  \param   c : コンテキスト
+ *  \return  true / false
+ */
+/**************************************************************************************************/
 func (this *redisRepo) isTxStart(c *gin.Context) bool {
 	// コンテキストにあるか確認
 	i, ok := c.Get(ckey.IsRedisTxStart)
@@ -663,7 +706,6 @@ func (this *redisRepo) Close(c *gin.Context) error {
 	if err != nil {
 		return err
 	}
-	seelog.Debug("redis closed")
 
 	return nil
 }
