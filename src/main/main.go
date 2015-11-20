@@ -106,6 +106,7 @@ func Custom() gin.HandlerFunc {
 
 		// リクエスト前処理
 		defer log.Flush()
+		defer DBI.RollBack(c)
 
 		// ランダムシード
 		rand.Seed(time.Now().UnixNano())

@@ -34,7 +34,6 @@ type postData struct {
  */
 /**************************************************************************************************/
 func TestUserSelect(c *gin.Context) {
-	defer db.RollBack(c)
 
 	// JSON from POST
 	type PostJSON struct {
@@ -90,8 +89,6 @@ func TestUserSelect(c *gin.Context) {
  */
 /**************************************************************************************************/
 func TestUserCreate(c *gin.Context) {
-	defer db.RollBack(c)
-
 	// JSON from POST
 	type PostJSON struct {
 		Name string `json:"Name" binding:"required"`
@@ -144,8 +141,6 @@ func TestUserCreate(c *gin.Context) {
  */
 /**************************************************************************************************/
 func TestUserUpdate(c *gin.Context) {
-	defer db.RollBack(c)
-
 	// JSON from POST
 	type PostJSON struct {
 		Id       uint64 `json:"Id" binding:"required"`
@@ -198,8 +193,6 @@ func TestUserUpdate(c *gin.Context) {
  */
 /**************************************************************************************************/
 func TestUserItemCreate(c *gin.Context) {
-	defer db.RollBack(c)
-
 	// JSON from POST
 	type PostJSON struct {
 		UserId uint64 `json:"UserId" binding:"required"`
@@ -239,8 +232,6 @@ func TestUserItemCreate(c *gin.Context) {
  */
 /**************************************************************************************************/
 func TestUserItemDelete(c *gin.Context) {
-	defer db.RollBack(c)
-
 	// JSON from POST
 	type PostJSON struct {
 		UserId uint64 `json:"UserId" binding:"required"`
@@ -288,8 +279,6 @@ func TestUserItemDelete(c *gin.Context) {
  */
 /**************************************************************************************************/
 func TestUserLogCreate(c *gin.Context) {
-	defer db.RollBack(c)
-
 	// JSON from POST
 	type PostJSON struct {
 		Id    uint64 `json:"Id" binding:"required"`
@@ -345,7 +334,6 @@ func TestUserLogCreate(c *gin.Context) {
  */
 /**************************************************************************************************/
 func TestUserMisc(c *gin.Context) {
-	defer db.RollBack(c)
 
 	l := func(str string, param interface{}) {
 		log.Debug(str, " : ", param)
