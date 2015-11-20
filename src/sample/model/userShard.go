@@ -10,7 +10,6 @@ package model
 /**************************************************************************************************/
 import (
 	"sample/DBI"
-	"sample/cache"
 
 	builder "github.com/Masterminds/squirrel"
 	log "github.com/cihub/seelog"
@@ -41,6 +40,7 @@ type userShardRepoI interface {
 type userShardRepo struct {
 	table   string
 	columns string
+	cacheI
 }
 
 /**************************************************************************************************/
@@ -49,9 +49,11 @@ type userShardRepo struct {
  */
 /**************************************************************************************************/
 func NewUserShardRepo() userShardRepoI {
+	cache := NewCacheRepo()
 	repo := &userShardRepo{
 		table:   "user_shard",
 		columns: "id, shard_id",
+		cacheI:  cache,
 	}
 	return repo
 }
@@ -86,6 +88,9 @@ func (this *userShardRepo) Create(c *gin.Context, userShard *UserShard) error {
 	if err != nil {
 		return err
 	}
+
+	// TODO:キャッシュを意図的に更新する
+
 	return nil
 }
 
@@ -135,7 +140,7 @@ func (this *userShardRepo) FindByUserId(c *gin.Context, userId interface{}, opti
 			log.Info("not found user shard id")
 		}
 	} else {
-		cv, err := cache.Get(this.table, "all")
+		cv, err := this.GetCache(this.table, "all")
 		if err != nil {
 			return nil, err
 		}
@@ -202,6 +207,7 @@ func (this *userShardRepo) makeCache(c *gin.Context) (interface{}, error) {
 	for _, v := range *allData {
 		dataMap[v.Id] = v
 	}
-	cache.Set(this.table, "all", dataMap)
+	this.SetCache(dataMap, this.table, "all")
+
 	return dataMap, nil
 }
