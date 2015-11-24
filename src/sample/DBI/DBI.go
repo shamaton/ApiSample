@@ -21,9 +21,9 @@ import (
 	"golang.org/x/net/context"
 	"gopkg.in/gorp.v1"
 
+	"sample/common/err"
 	ckey "sample/conf/context"
 	"sample/conf/gameConf"
-	"sample/common/err"
 )
 
 var (
@@ -69,28 +69,28 @@ func BuildInstances(ctx context.Context) (context.Context, err.ErrWriter) {
 	// master - master
 	masterW, ew := getWriteMaster(gc)
 	ctx = context.WithValue(ctx, ckey.DbMasterW, masterW)
-	if ew.Err() != nil {
+	if ew.HasErr() {
 		return ctx, ew.Write()
 	}
 
 	// master - shard
 	shardWMap, ew := getWriteShard(gc)
 	ctx = context.WithValue(ctx, ckey.DbShardWMap, shardWMap)
-	if ew.Err() != nil {
+	if ew.HasErr() {
 		return ctx, ew.Write()
 	}
 
 	// slave master
 	masterRs, ew := getReadOnlyMaster(gc)
 	ctx = context.WithValue(ctx, ckey.DbMasterRs, masterRs)
-	if ew.Err() != nil {
+	if ew.HasErr() {
 		return ctx, ew.Write()
 	}
 
 	// slave shard
 	shardRMaps, ew := getReadOnlyShard(gc)
 	ctx = context.WithValue(ctx, ckey.DbShardRMaps, shardRMaps)
-	if ew.Err() != nil {
+	if ew.HasErr() {
 		return ctx, ew.Write()
 	}
 
@@ -116,7 +116,7 @@ func BuildInstances(ctx context.Context) (context.Context, err.ErrWriter) {
 /**************************************************************************************************/
 func getWriteMaster(gc *gameConf.GameConfig) (*gorp.DbMap, err.ErrWriter) {
 	dbMap, ew := getDbMap(gc.Db, gc.Server.Host, gc.Server.Port, "game_master")
-	if ew.Err() != nil {
+	if ew.HasErr() {
 		log.Critical("master : game_master setup failed!!")
 		return nil, ew
 	}
@@ -143,7 +143,7 @@ func getWriteShard(gc *gameConf.GameConfig) (map[int]*gorp.DbMap, err.ErrWriter)
 		shardMap[shardId], ew = getDbMap(gc.Db, gc.Server.Host, gc.Server.Port, dbName)
 
 		// error
-		if ew.Err() != nil {
+		if ew.HasErr() {
 			// すでに成功しているものをクローズする
 			for _, dbMap := range shardMap {
 				dbMap.Db.Close()
@@ -179,7 +179,7 @@ func getReadOnlyMaster(gc *gameConf.GameConfig) ([]*gorp.DbMap, err.ErrWriter) {
 		masterR, ew := getDbMap(gc.Db, slaveConf.Host, slaveConf.Port, "game_master")
 
 		// error
-		if ew.Err() != nil {
+		if ew.HasErr() {
 			errorFunc(masterRs)
 			return nil, ew.Write("slave : game_master setup failed!!")
 		}
@@ -231,7 +231,7 @@ func getReadOnlyShard(gc *gameConf.GameConfig) ([]map[int]*gorp.DbMap, err.ErrWr
 			db, ew := getDbMap(gc.Db, slaveConf.Host, slaveConf.Port, dbName)
 
 			// error
-			if ew.Err() != nil {
+			if ew.HasErr() {
 				errorFunc(shardMaps)
 				return nil, ew.Write("slave : " + dbName + " setup failed!!")
 			}
@@ -351,7 +351,7 @@ func MasterTxStart(c *gin.Context, mode string) err.ErrWriter {
 
 	// dbハンドル取得
 	db, ew := GetDBMasterConnection(c, mode)
-	if ew.Err() != nil {
+	if ew.HasErr() {
 		return ew.Write()
 	}
 
@@ -390,7 +390,7 @@ func ShardAllTxStart(c *gin.Context, mode string) err.ErrWriter {
 
 	// dbハンドルマップを取得
 	dbMap, ew := GetDBShardMap(c, mode)
-	if ew.Err() != nil {
+	if ew.HasErr() {
 		return ew.Write()
 	}
 
@@ -617,7 +617,7 @@ func GetTransaction(c *gin.Context, mode string, isShard bool, shardId int) (*go
 		// トランザクションを開始してない場合、中で開始する
 		ew := ShardAllTxStart(c, mode)
 
-		if ew.Err() != nil {
+		if ew.HasErr() {
 			return nil, ew.Write("shard transaction start failed!!")
 		}
 
@@ -639,7 +639,7 @@ func GetTransaction(c *gin.Context, mode string, isShard bool, shardId int) (*go
 		// トランザクションを開始してない場合、開始する
 		ew := MasterTxStart(c, mode)
 
-		if ew.Err() != nil {
+		if ew.HasErr() {
 			return nil, ew.Write("master transaction start failed!!")
 		}
 

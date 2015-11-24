@@ -4,6 +4,8 @@ import (
 	"strings"
 	"time"
 
+	"sample/common/err"
+
 	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 )
@@ -32,15 +34,15 @@ var cacheData = map[string]*cache{}
 /**
  * cache setter : 処理委譲用
  */
-type cacheSetter func(*gin.Context) (interface{}, error)
+type cacheSetter func(*gin.Context) (interface{}, err.ErrWriter)
 
 /**
  * interface
  */
 type cacheI interface {
 	SetCache(interface{}, string, ...string)
-	GetCache(string, ...string) (interface{}, error)
-	GetCacheWithSetter(*gin.Context, cacheSetter, string, ...string) (interface{}, error)
+	GetCache(string, ...string) interface{}
+	GetCacheWithSetter(*gin.Context, cacheSetter, string, ...string) (interface{}, err.ErrWriter)
 }
 
 /**************************************************************************************************/
@@ -90,26 +92,25 @@ func (this *cacheRepo) SetCache(data interface{}, key string, members ...string)
  *
  *  \param   key     : 主キー
  *  \param   members : 副キー
- *  \return  キャッシュ、エラー
+ *  \return  キャッシュ
  */
 /**************************************************************************************************/
-func (this *cacheRepo) GetCache(key string, members ...string) (interface{}, error) {
-
+func (this *cacheRepo) GetCache(key string, members ...string) interface{} {
 	uniqueKey := this.getUniqueKey(key, members)
 	cache, ok := cacheData[uniqueKey]
 	if !ok {
 		log.Info("not found cache")
-		return nil, nil
+		return nil
 	}
 
 	// 期限切れ時は古いのを削除しておく
 	if time.Now().Unix() > cache.expireAt {
 		log.Info("cache is expire")
 		delete(cacheData, uniqueKey)
-		return nil, nil
+		return nil
 	}
 
-	return cache.data, nil
+	return cache.data
 }
 
 /**************************************************************************************************/
@@ -123,25 +124,22 @@ func (this *cacheRepo) GetCache(key string, members ...string) (interface{}, err
  *  \return  キャッシュ、エラー
  */
 /**************************************************************************************************/
-func (this *cacheRepo) GetCacheWithSetter(c *gin.Context, setter cacheSetter, key string, members ...string) (interface{}, error) {
+func (this *cacheRepo) GetCacheWithSetter(c *gin.Context, setter cacheSetter, key string, members ...string) (interface{}, err.ErrWriter) {
 	var cData interface{}
-	var err error
+	ew := err.NewErrWriter()
 
 	// 取得してみる
-	cData, err = this.GetCache(key, members...)
-	if err != nil {
-		return nil, err
-	}
+	cData = this.GetCache(key, members...)
 
 	// データなしや期限切れの場合
 	if cData == nil {
-		cData, err = setter(c)
-		if err != nil {
-			return nil, err
+		cData, ew = setter(c)
+		if ew.HasErr() {
+			return nil, ew.Write()
 		}
 	}
 
-	return cData, nil
+	return cData, ew
 }
 
 /**************************************************************************************************/

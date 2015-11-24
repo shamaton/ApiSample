@@ -23,6 +23,7 @@ import (
 	"github.com/garyburd/redigo/redis"
 
 	"sample/DBI"
+	"sample/common/err"
 	ckey "sample/conf/context"
 	"sample/conf/gameConf"
 	"sample/logic"
@@ -39,9 +40,9 @@ var (
  */
 /**************************************************************************************************/
 func main() {
-	var err error
 	// context
 	ctx = context.Background()
+	ew := err.NewErrWriter()
 	defer DBI.Close(ctx)
 
 	setLoggerConfig()
@@ -51,8 +52,9 @@ func main() {
 	ctx = context.WithValue(ctx, ckey.GameConfig, gameConf)
 
 	// db
-	ctx, err = DBI.BuildInstances(ctx)
-	if err != nil {
+	ctx, ew = DBI.BuildInstances(ctx)
+	if ew.HasErr() {
+		log.Critical(ew.Err()...)
 		log.Critical("init DB failed!!")
 		DBI.Close(ctx)
 		os.Exit(1)
@@ -68,7 +70,7 @@ func main() {
 	// make route
 	makeRoute(router)
 
-	err = router.Run(":9999")
+	err := router.Run(":9999")
 
 	// 存在しないルート時
 	if err != nil {

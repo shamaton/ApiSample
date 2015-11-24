@@ -57,8 +57,8 @@ func NewUserRepo() *userRepo {
 func (r *userRepo) FindById(c *gin.Context, id uint64, options ...interface{}) *User {
 	var user = new(User)
 	user.Id = id
-	err := r.Find(c, user, options...)
-	if err != nil {
+	ew := r.Find(c, user, options...)
+	if ew.HasErr() {
 		return nil
 	}
 	return user

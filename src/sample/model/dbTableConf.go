@@ -6,11 +6,10 @@ package model
 
 import (
 	builder "github.com/Masterminds/squirrel"
-	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 
-	"errors"
 	"sample/DBI"
+	"sample/common/err"
 )
 
 /**
@@ -46,7 +45,7 @@ type DbTableConf struct {
  * interface
  */
 type dbTableConfRepoI interface {
-	Find(*gin.Context, string) (*DbTableConf, error)
+	Find(*gin.Context, string) (*DbTableConf, err.ErrWriter)
 }
 
 /**
@@ -82,22 +81,20 @@ func NewDbTableConfRepo() dbTableConfRepoI {
  *  \return  テーブルデータ、エラー
  */
 /**************************************************************************************************/
-func (this *dbTableConfRepo) Find(c *gin.Context, tableName string) (*DbTableConf, error) {
-	var err error
+func (this *dbTableConfRepo) Find(c *gin.Context, tableName string) (*DbTableConf, err.ErrWriter) {
 
-	cv, err := this.GetCacheWithSetter(c, this.cacheSetter, this.table, "all")
-	if err != nil {
-		return nil, err
+	cv, ew := this.GetCacheWithSetter(c, this.cacheSetter, this.table, "all")
+	if ew.HasErr() {
+		return nil, ew.Write()
 	}
 	allData := cv.(map[string]DbTableConf)
 
 	data, isValid := allData[tableName]
 	if !isValid {
-		err = errors.New("not found db_table_conf record!!")
-		return nil, err
+		return nil, ew.Write("not found db_table_conf record!!")
 	}
 
-	return &data, err
+	return &data, ew
 }
 
 /**************************************************************************************************/
@@ -108,29 +105,27 @@ func (this *dbTableConfRepo) Find(c *gin.Context, tableName string) (*DbTableCon
  *  \return  全データ、エラー
  */
 /**************************************************************************************************/
-func (this *dbTableConfRepo) finds(c *gin.Context) (*[]DbTableConf, error) {
+func (this *dbTableConfRepo) finds(c *gin.Context) (*[]DbTableConf, err.ErrWriter) {
 	var datas []DbTableConf
 
 	// ハンドル取得
-	conn, err := DBI.GetDBMasterConnection(c, DBI.MODE_R)
-	if err != nil {
-		log.Error("not found master connection!!")
-		return nil, err
+	conn, ew := DBI.GetDBMasterConnection(c, DBI.MODE_R)
+	if ew.HasErr() {
+		return nil, ew.Write("not found master connection!!")
 	}
 
 	// user_shardを検索
-	sql, args, err := builder.Select(this.columns).From(this.table).ToSql()
-	if err != nil {
-		log.Error("query build error!!")
-		return nil, err
+	sql, args, e := builder.Select(this.columns).From(this.table).ToSql()
+	if e != nil {
+		return nil, ew.Write("query build error!!")
 	}
 
-	_, err = conn.Select(&datas, sql, args...)
-	if err != nil {
-		log.Error("not found db table conf!!")
+	_, e = conn.Select(&datas, sql, args...)
+	if e != nil {
+		return nil, ew.Write("not found db table conf!!")
 	}
 
-	return &datas, err
+	return &datas, ew
 }
 
 /**************************************************************************************************/
@@ -141,15 +136,13 @@ func (this *dbTableConfRepo) finds(c *gin.Context) (*[]DbTableConf, error) {
  *  \return  cacheGetしたものと同等のデータ、エラー
  */
 /**************************************************************************************************/
-func (this *dbTableConfRepo) cacheSetter(c *gin.Context) (interface{}, error) {
-	allData, err := this.finds(c)
-	if err != nil {
-		return nil, err
+func (this *dbTableConfRepo) cacheSetter(c *gin.Context) (interface{}, err.ErrWriter) {
+	allData, ew := this.finds(c)
+	if ew.HasErr() {
+		return nil, ew.Write()
 	}
 	if len(*allData) < 1 {
-		err = errors.New("db_table_conf is empty!!")
-		log.Error(err)
-		return nil, err
+		return nil, ew.Write("db_table_conf is empty!!")
 	}
 
 	// マップ生成
@@ -159,7 +152,7 @@ func (this *dbTableConfRepo) cacheSetter(c *gin.Context) (interface{}, error) {
 	}
 	this.SetCache(dataMap, this.table, "all")
 
-	return dataMap, nil
+	return dataMap, ew
 }
 
 /**

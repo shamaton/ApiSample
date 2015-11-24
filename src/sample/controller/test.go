@@ -17,6 +17,8 @@ import (
 
 	"sample/common/log"
 
+	"sample/common/err"
+
 	"github.com/gin-gonic/gin"
 	"github.com/k0kubun/pp"
 )
@@ -39,9 +41,9 @@ func TestUserSelect(c *gin.Context) {
 	}
 
 	var json PostJSON
-	err := c.BindJSON(&json)
-	if err != nil {
-		errorJson(c, "json error", err)
+	e := c.BindJSON(&json)
+	if e != nil {
+		errorJson(c, "json error", err.NewErrWriter(e))
 		return
 	}
 
@@ -49,7 +51,7 @@ func TestUserSelect(c *gin.Context) {
 	userRepo := model.NewUserRepo()
 	user := userRepo.FindById(c, json.Id)
 	if user == nil {
-		errorJson(c, "user find_by_id error", nil)
+		errorJson(c, "user find_by_id error", err.NewErrWriter().Write())
 		return
 	}
 	log.Debug(pp.Println(user))
@@ -58,20 +60,13 @@ func TestUserSelect(c *gin.Context) {
 	var option = model.Option{"mode": db.MODE_W}
 	user = userRepo.FindById(c, 2, option)
 	if user == nil {
-		errorJson(c, "user find_by_id(use option) error", nil)
+		errorJson(c, "user find_by_id(use option) error", err.NewErrWriter().Write())
 		return
 	}
 	log.Debug("user find(option)", user)
 
 	// FINDS TEST
 	userRepo.FindsTest(c)
-
-	hoge := func() err.ErrWriter {
-		return nil
-	}
-
-	fuga := hoge()
-	log.Error(fuga)
 
 	ew := err.NewErrWriter("test error")
 	ew = ew.Write("this is error!!")
@@ -84,9 +79,9 @@ func TestUserSelect(c *gin.Context) {
 	condition := model.Condition{"where": whereCond}
 	option = model.Option{"shard_key": uint64(1)}
 
-	count, err := userRepo.Count(c, condition, option)
-	if err != nil {
-		errorJson(c, "user count error", err)
+	count, ew := userRepo.Count(c, condition, option)
+	if ew.HasErr() {
+		errorJson(c, "user count error", ew.Write())
 		return
 	}
 	log.Debug("user count : ", count)
@@ -106,9 +101,9 @@ func TestUserCreate(c *gin.Context) {
 		//UUID  string `json:"Name" binding:"required"`
 	}
 	var json PostJSON
-	err := c.BindJSON(&json)
-	if err != nil {
-		errorJson(c, "json error", err)
+	e := c.BindJSON(&json)
+	if e != nil {
+		errorJson(c, "json error", err.NewErrWriter(e).Write())
 		return
 	}
 
@@ -120,9 +115,9 @@ func TestUserCreate(c *gin.Context) {
 
 	userShardRepo := model.NewUserShardRepo()
 	userShard := &model.UserShard{Id: int(userId), ShardId: shardId}
-	err = userShardRepo.Create(c, userShard)
-	if err != nil {
-		errorJson(c, "user shard create error ", err)
+	ew := userShardRepo.Create(c, userShard)
+	if ew.HasErr() {
+		errorJson(c, "user shard create error ", ew.Write())
 		return
 	}
 	// シャード生成のため一旦コミット
@@ -135,9 +130,9 @@ func TestUserCreate(c *gin.Context) {
 	userRepo := model.NewUserRepo()
 
 	newUser := &model.User{Id: userId, Name: json.Name}
-	err = userRepo.Create(c, newUser)
-	if err != nil {
-		errorJson(c, "user create error ", err)
+	ew = userRepo.Create(c, newUser)
+	if ew.HasErr() {
+		errorJson(c, "user create error ", ew.Write())
 		return
 	}
 	// COMMIT
@@ -159,9 +154,9 @@ func TestUserUpdate(c *gin.Context) {
 	}
 
 	var json PostJSON
-	err := c.BindJSON(&json)
-	if err != nil {
-		errorJson(c, "json error", err)
+	e := c.BindJSON(&json)
+	if e != nil {
+		errorJson(c, "json error", err.NewErrWriter(e).Write())
 		return
 	}
 
@@ -170,7 +165,7 @@ func TestUserUpdate(c *gin.Context) {
 	// レコードがあるか確認
 	user := userRepo.FindById(c, json.Id)
 	if user == nil {
-		errorJson(c, "user not found!!", nil)
+		errorJson(c, "user not found!!", err.NewErrWriter().Write())
 		return
 	}
 
@@ -178,7 +173,7 @@ func TestUserUpdate(c *gin.Context) {
 	option := model.Option{"for_update": 1}
 	user = userRepo.FindById(c, json.Id, option)
 	if user == nil {
-		errorJson(c, "user not found!!", nil)
+		errorJson(c, "user not found!!", err.NewErrWriter().Write())
 		return
 	}
 	log.Debug(user)
@@ -187,9 +182,9 @@ func TestUserUpdate(c *gin.Context) {
 	prevUser := *user
 	user.Score += json.AddScore
 
-	err = userRepo.Update(c, user, &prevUser)
-	if err != nil {
-		errorJson(c, "user update error!!", err)
+	ew := userRepo.Update(c, user, &prevUser)
+	if ew.HasErr() {
+		errorJson(c, "user update error!!", ew.Write())
 		return
 	}
 	// COMMIT
@@ -212,9 +207,9 @@ func TestUserItemCreate(c *gin.Context) {
 	}
 
 	var json PostJSON
-	err := c.BindJSON(&json)
-	if err != nil {
-		errorJson(c, "json error", err)
+	e := c.BindJSON(&json)
+	if e != nil {
+		errorJson(c, "json error", err.NewErrWriter(e).Write())
 		return
 	}
 
@@ -226,9 +221,9 @@ func TestUserItemCreate(c *gin.Context) {
 
 	// SAVE TEST
 	saveData := &model.UserItem{UserId: json.UserId, ItemId: json.ItemId, Num: json.Num}
-	err = userItemRepo.Save(c, saveData)
-	if err != nil {
-		errorJson(c, "user item save error ", err)
+	ew := userItemRepo.Save(c, saveData)
+	if ew.HasErr() {
+		errorJson(c, "user item save error ", ew.Write())
 		return
 	}
 
@@ -250,9 +245,9 @@ func TestUserItemDelete(c *gin.Context) {
 	}
 
 	var json PostJSON
-	err := c.BindJSON(&json)
-	if err != nil {
-		errorJson(c, "json error", err)
+	e := c.BindJSON(&json)
+	if e != nil {
+		errorJson(c, "json error", err.NewErrWriter(e))
 		return
 	}
 
@@ -261,21 +256,21 @@ func TestUserItemDelete(c *gin.Context) {
 	// 確認して削除
 	userItem := userItemRepo.FindByPk(c, json.UserId, json.ItemId, model.Option{"mode": db.MODE_W})
 	if userItem == nil {
-		errorJson(c, "not found user item!! ", nil)
+		errorJson(c, "not found user item!! ", err.NewErrWriter().Write())
 		return
 	}
 
 	// LOCK
 	userItem = userItemRepo.FindByPk(c, json.UserId, json.ItemId, model.Option{"mode": db.MODE_W, "for_update": 1})
 	if userItem == nil {
-		errorJson(c, "not found user item!! ", nil)
+		errorJson(c, "not found user item!! ", err.NewErrWriter().Write())
 		return
 	}
 
 	// DELETE
-	err = userItemRepo.Delete(c, userItem)
-	if err != nil {
-		errorJson(c, "user item save error ", err)
+	ew := userItemRepo.Delete(c, userItem)
+	if ew.HasErr() {
+		errorJson(c, "user item save error ", ew.Write())
 		return
 	}
 
@@ -297,9 +292,9 @@ func TestUserLogCreate(c *gin.Context) {
 	}
 
 	var json PostJSON
-	err := c.BindJSON(&json)
-	if err != nil {
-		errorJson(c, "json error", err)
+	e := c.BindJSON(&json)
+	if e != nil {
+		errorJson(c, "json error", err.NewErrWriter(e).Write())
 		return
 	}
 
@@ -307,7 +302,7 @@ func TestUserLogCreate(c *gin.Context) {
 	userRepo := model.NewUserRepo()
 	user := userRepo.FindById(c, json.Id)
 	if user == nil {
-		errorJson(c, "user not found!!", nil)
+		errorJson(c, "user not found!!", err.NewErrWriter().Write())
 		return
 	}
 
@@ -316,9 +311,9 @@ func TestUserLogCreate(c *gin.Context) {
 	// SEQUENCE TEST
 	// CREATE
 	logData := &model.UserTestLog{UserId: json.Id, TestValue: json.Value}
-	err = logRepo.Create(c, logData)
-	if err != nil {
-		errorJson(c, "log create error!! ", err)
+	ew := logRepo.Create(c, logData)
+	if ew.HasErr() {
+		errorJson(c, "log create error!! ", ew.Write())
 		return
 	}
 
@@ -328,8 +323,8 @@ func TestUserLogCreate(c *gin.Context) {
 	logData1 := model.UserTestLog{UserId: 3, TestValue: 123}
 	logData2 := model.UserTestLog{UserId: 3, TestValue: 4567}
 	logDatas = append(logDatas, logData1, logData2)
-	if err = logRepo.CreateMulti(c, &logDatas); err != nil {
-		errorJson(c, "log create multi error!! ", err)
+	if ew = logRepo.CreateMulti(c, &logDatas); ew.HasErr() {
+		errorJson(c, "log create multi error!! ", ew.Write())
 		return
 	}
 
@@ -449,11 +444,11 @@ func TokenTest(c *gin.Context) {
 	tokenData, _ := base64.StdEncoding.DecodeString(token)
 
 	var d postData
-	err := json.Unmarshal(tokenData, &d)
+	e := json.Unmarshal(tokenData, &d)
 	log.Info(d)
 
-	if err != nil {
-		errorJson(c, "token test error!! ", err)
+	if e != nil {
+		errorJson(c, "token test error!! ", err.NewErrWriter(e).Write())
 		return
 	}
 
@@ -478,7 +473,8 @@ func TokenTest(c *gin.Context) {
  *  エラー投げる
  */
 /**************************************************************************************************/
-func errorJson(c *gin.Context, msg string, err interface{}) {
-	log.Error(msg, " : ", err)
+func errorJson(c *gin.Context, msg string, ew err.ErrWriter) {
+	v := append([]interface{}{msg, ":"}, ew.Err()...)
+	log.Error(v)
 	c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
 }

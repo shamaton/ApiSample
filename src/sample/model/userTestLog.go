@@ -56,8 +56,8 @@ func (this *userTestLogRepo) FindByID(c *gin.Context, id uint64, options ...inte
 	var userTestLog = new(UserTestLog)
 	userTestLog.Id = id
 	userTestLog.UserId = 1 // test
-	err := this.Find(c, userTestLog, options...)
-	if err != nil {
+	ew := this.Find(c, userTestLog, options...)
+	if ew.HasErr() {
 		return nil
 	}
 	return userTestLog
