@@ -15,7 +15,8 @@ import (
 
 	"sample/logic"
 
-	log "github.com/cihub/seelog"
+	"sample/common/error"
+	"sample/common/log"
 
 	"github.com/gin-gonic/gin"
 	"github.com/k0kubun/pp"
@@ -65,6 +66,12 @@ func TestUserSelect(c *gin.Context) {
 
 	// FINDS TEST
 	userRepo.FindsTest(c)
+
+	ew := error.NewErrWriter("test error")
+	ew = ew.Write("this is error!!")
+	ew = ew.Write()
+
+	log.Critical(ew.Err()...)
 
 	// COUNT TEST
 	whereCond := model.WhereCondition{{"id", "IN", model.In{1, 2, 3}}}
@@ -451,7 +458,7 @@ func TokenTest(c *gin.Context) {
 	hash := hmac.New(sha256.New, []byte("secret_key"))
 	hash.Write([]byte("apple"))
 	hashsum := fmt.Sprintf("%x", hash.Sum(nil))
-	log.Infof(hashsum)
+	log.Info(hashsum)
 
 	if recv_sha == hashsum {
 		log.Info("sha correct!!")
@@ -465,7 +472,7 @@ func TokenTest(c *gin.Context) {
  *  エラー投げる
  */
 /**************************************************************************************************/
-func errorJson(c *gin.Context, msg string, err error) {
+func errorJson(c *gin.Context, msg string, err interface{}) {
 	log.Error(msg, " : ", err)
 	c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
 }
