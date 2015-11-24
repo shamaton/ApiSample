@@ -1,4 +1,4 @@
-package error
+package err
 
 /**************************************************************************************************/
 /*!
@@ -15,8 +15,8 @@ import (
 
 type errArgs []interface{}
 
-type errWriter struct {
-	errMsgs []interface{}
+type ErrWriter struct {
+	errMsgs errArgs
 }
 
 /**************************************************************************************************/
@@ -24,9 +24,9 @@ type errWriter struct {
  *  操作オブジェクトの生成
  */
 /**************************************************************************************************/
-func NewErrWriter(msg ...interface{}) errWriter {
+func NewErrWriter(msg ...interface{}) ErrWriter {
 
-	ew := errWriter{}
+	ew := ErrWriter{}
 
 	// msgがある場合追加しておく
 	if len(msg) > 0 {
@@ -45,7 +45,7 @@ func NewErrWriter(msg ...interface{}) errWriter {
  *  \return  更新後のエラースタック
  */
 /**************************************************************************************************/
-func (this errWriter) Write(msg ...interface{}) errWriter {
+func (this ErrWriter) Write(msg ...interface{}) ErrWriter {
 	this.errMsgs = append(this.errMsgs, msg...)
 	// 呼び出し元
 	this = this.addCallerMsg(2)
@@ -59,7 +59,7 @@ func (this errWriter) Write(msg ...interface{}) errWriter {
  *  \return  エラーメッセージ
  */
 /**************************************************************************************************/
-func (this errWriter) Err() errArgs {
+func (this ErrWriter) Err() errArgs {
 	if len(this.errMsgs) < 1 {
 		return nil
 	}
@@ -74,7 +74,7 @@ func (this errWriter) Err() errArgs {
  *  \return  更新後のエラースタック
  */
 /**************************************************************************************************/
-func (this errWriter) addCallerMsg(skip int) errWriter {
+func (this ErrWriter) addCallerMsg(skip int) ErrWriter {
 	// 呼び出し元
 	_, file, line, _ := runtime.Caller(skip)
 
@@ -95,7 +95,7 @@ func (this errWriter) addCallerMsg(skip int) errWriter {
  *  \return  メッセージ配列
  */
 /**************************************************************************************************/
-func (this errWriter) fixedPhrase(file string, line int) errArgs {
+func (this ErrWriter) fixedPhrase(file string, line int) errArgs {
 	// 一旦、srcでフィルタする
 	splits := strings.Split(file, "/src/")
 
@@ -116,7 +116,7 @@ func (this errWriter) fixedPhrase(file string, line int) errArgs {
  *  \return  更新後のエラースタック
  */
 /**************************************************************************************************/
-func (this errWriter) unshift(v ...interface{}) errWriter {
+func (this ErrWriter) unshift(v ...interface{}) ErrWriter {
 	this.errMsgs = append(v, this.errMsgs...)
 	return this
 }

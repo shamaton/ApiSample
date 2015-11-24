@@ -15,7 +15,6 @@ import (
 
 	"sample/logic"
 
-	"sample/common/error"
 	"sample/common/log"
 
 	"github.com/gin-gonic/gin"
@@ -67,7 +66,14 @@ func TestUserSelect(c *gin.Context) {
 	// FINDS TEST
 	userRepo.FindsTest(c)
 
-	ew := error.NewErrWriter("test error")
+	hoge := func() err.ErrWriter {
+		return nil
+	}
+
+	fuga := hoge()
+	log.Error(fuga)
+
+	ew := err.NewErrWriter("test error")
 	ew = ew.Write("this is error!!")
 	ew = ew.Write()
 
