@@ -9,13 +9,13 @@ package model
  */
 /**************************************************************************************************/
 import (
+	builder "github.com/Masterminds/squirrel"
+	"github.com/gin-gonic/gin"
+
 	"sample/DBI"
+	"sample/common/log"
 
 	"sample/common/err"
-
-	builder "github.com/Masterminds/squirrel"
-	log "github.com/cihub/seelog"
-	"github.com/gin-gonic/gin"
 )
 
 /**

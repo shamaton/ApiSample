@@ -6,8 +6,9 @@ import (
 
 	"sample/common/err"
 
-	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
+
+	"sample/common/log"
 )
 
 // デフォルトの期限切れ時間

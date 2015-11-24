@@ -14,7 +14,6 @@ import (
 	"math/rand"
 	"strconv"
 
-	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
 
@@ -22,6 +21,7 @@ import (
 	"gopkg.in/gorp.v1"
 
 	"sample/common/err"
+	"sample/common/log"
 	ckey "sample/conf/context"
 	"sample/conf/gameConf"
 )

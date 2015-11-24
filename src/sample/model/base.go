@@ -10,15 +10,16 @@ package model
  */
 /**************************************************************************************************/
 import (
-	"reflect"
-	db "sample/DBI"
-	"strings"
-
-	"sample/common/err"
-
 	builder "github.com/Masterminds/squirrel"
-	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
+
+	"reflect"
+
+	db "sample/DBI"
+	"sample/common/err"
+	"sample/common/log"
+
+	"strings"
 )
 
 // 一旦ここに
