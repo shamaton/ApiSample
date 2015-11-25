@@ -14,10 +14,9 @@ import (
 
 	"sample/common/db"
 
+	"math/rand"
 	"sample/common/err"
 	. "sample/conf"
-	"math/rand"
-	"sample/common/log"
 )
 
 /**
@@ -26,7 +25,7 @@ import (
  */
 type UserShardWeight struct {
 	ShardId int `db:"shard_id" pk:"true"`
-	Weight int
+	Weight  int
 }
 
 /**
@@ -81,8 +80,6 @@ func (this *userShardWeightRepo) ChoiceShardId(c *gin.Context) (int, err.ErrWrit
 		}
 	}
 
-	log.Info(shardWeights)
-
 	// ランダムに抽選
 	index := rand.Intn(len(shardWeights))
 	shardId := shardWeights[index]
@@ -105,7 +102,7 @@ func (this *userShardWeightRepo) ChoiceShardId(c *gin.Context) (int, err.ErrWrit
 /**************************************************************************************************/
 func (this *userShardWeightRepo) finds(c *gin.Context, mode string) (*[]UserShardWeight, err.ErrWriter) {
 	// ハンドル取得
-	conn, ew := db.GetDBMasterConnection(c, mode)
+	tx, ew := db.GetTransaction(c, mode, false, 0)
 	if ew.HasErr() {
 		return nil, ew.Write("not found master connection!!")
 	}
@@ -118,7 +115,7 @@ func (this *userShardWeightRepo) finds(c *gin.Context, mode string) (*[]UserShar
 
 	// 全取得
 	var allData []UserShardWeight
-	_, e = conn.Select(&allData, sql, args...)
+	_, e = tx.Select(&allData, sql, args...)
 	if e != nil {
 		return nil, ew.Write("select shard weight error!!", e)
 	}

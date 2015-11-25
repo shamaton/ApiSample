@@ -13,7 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"sample/common/db"
-	"sample/common/log"
 
 	"sample/common/err"
 	. "sample/conf"
@@ -32,6 +31,7 @@ type UserShard struct {
  * Interface
  */
 type userShardRepoI interface {
+	IsExistByUserId(*gin.Context, interface{}) (bool, err.ErrWriter)
 	FindByUserId(*gin.Context, interface{}, ...interface{}) (*UserShard, err.ErrWriter)
 
 	Create(*gin.Context, *UserShard) err.ErrWriter
@@ -94,6 +94,53 @@ func (this *userShardRepo) Create(c *gin.Context, userShard *UserShard) err.ErrW
 
 /**************************************************************************************************/
 /*!
+ *  ユーザーがshardingされているか確認する
+ *
+ *  \param   c : コンテキスト
+ *  \return  全データ、エラー
+ */
+/**************************************************************************************************/
+func (this *userShardRepo) IsExistByUserId(c *gin.Context, userId interface{}) (bool, err.ErrWriter) {
+
+	// Cacheから取得
+	cv, ew := this.GetCacheWithSetter(c, this.cacheSetter, this.table, "all")
+	if ew.HasErr() {
+		return false, ew.Write()
+	}
+	allData := cv.(map[int]UserShard)
+	data, ok := allData[int(userId.(uint64))]
+
+	// キャッシュに存在した
+	if ok && data.ShardId > 0 {
+		return true, ew
+	}
+
+	// DBから探す(MODE R)
+	dbData, ew := this.findByUserId(c, userId, MODE_R)
+	if ew.HasErr() {
+		return false, ew.Write()
+	}
+	// 存在した
+	if dbData.ShardId > 0 {
+		return true, ew
+	}
+
+	// DBから探す(MODE W)
+	dbData, ew = this.findByUserId(c, userId, MODE_W)
+	if ew.HasErr() {
+		return false, ew.Write()
+	}
+	// 存在した
+	if dbData.ShardId > 0 {
+		return true, ew
+	}
+
+	// 存在しない
+	return false, ew
+}
+
+/**************************************************************************************************/
+/*!
  *  ユーザーIDの紐づくshard idを取得する
  *
  *  \param   c : コンテキスト
@@ -102,7 +149,7 @@ func (this *userShardRepo) Create(c *gin.Context, userShard *UserShard) err.ErrW
  */
 /**************************************************************************************************/
 func (this *userShardRepo) FindByUserId(c *gin.Context, userId interface{}, options ...interface{}) (*UserShard, err.ErrWriter) {
-	var userShard UserShard
+	var userShard *UserShard
 
 	// optionsの解析
 	b := base{}
@@ -112,53 +159,107 @@ func (this *userShardRepo) FindByUserId(c *gin.Context, userId interface{}, opti
 	}
 
 	if mode == MODE_W {
-		// ハンドル取得
-		conn, ew := db.GetDBMasterConnection(c, mode)
-		if ew.HasErr() {
-			return nil, ew.Write("not found master connection!!")
-		}
-
-		// クエリ生成
-		sql, args, e := builder.Select(this.columns).From(this.table).Where("id = ?", userId).ToSql()
-		if e != nil {
-			return nil, ew.Write("query build error!!", e)
-		}
-
-		// user_shardを検索
-		e = conn.SelectOne(&userShard, sql, args...)
-		if e != nil {
-			return nil, ew.Write("select shard error!!", e)
-		}
-		// ユーザー生成していない場合があるので、エラーにはしない
-		if userShard.ShardId < 1 {
-			log.Info("not found user shard id")
-		}
-	} else {
-		cv, ew := this.GetCacheWithSetter(c, this.cacheSetter, this.table, "all")
+		userShard, ew = this.findByUserIdModeW(c, userId)
 		if ew.HasErr() {
 			return nil, ew.Write()
 		}
-		allData := cv.(map[int]UserShard)
-		data, ok := allData[int(userId.(uint64))]
-
-		// キャッシュにない場合、DBから探す
-		if !ok {
-			dbData, ew := this.FindByUserId(c, userId, Option{"mode": MODE_W})
-
-			// それでもダメならエラー
-			if ew.HasErr() || dbData.ShardId < 1 {
-				return nil, ew.Write()
-			}
-
-			// 更新しておく
-			userShard = *dbData
-			allData[data.Id] = userShard
-			this.SetCache(allData, this.table, "all")
-		} else {
-			userShard = data
+	} else {
+		userShard, ew = this.findByUserIdModeR(c, userId)
+		if ew.HasErr() {
+			return nil, ew.Write()
 		}
 	}
 
+	return userShard, ew
+}
+
+/**************************************************************************************************/
+/*!
+ *  DBから探す
+ *
+ *  \param   c : コンテキスト
+ *  \return  全データ、エラー
+ */
+/**************************************************************************************************/
+func (this *userShardRepo) findByUserIdModeW(c *gin.Context, userId interface{}) (*UserShard, err.ErrWriter) {
+
+	dbData, ew := this.findByUserId(c, userId, MODE_W)
+	if ew.HasErr() {
+		return nil, ew.Write()
+	}
+
+	// レコードが見つからない場合はエラー
+	if dbData.ShardId < 1 {
+		return nil, ew.Write("not found user shard id")
+	}
+	return dbData, ew
+}
+
+/**************************************************************************************************/
+/*!
+ *  キャッシュから探し、ない場合はDBから探す。
+ *
+ *  \param   c : コンテキスト
+ *  \return  全データ、エラー
+ */
+/**************************************************************************************************/
+func (this *userShardRepo) findByUserIdModeR(c *gin.Context, userId interface{}) (*UserShard, err.ErrWriter) {
+
+	// Cacheから取得
+	cv, ew := this.GetCacheWithSetter(c, this.cacheSetter, this.table, "all")
+	if ew.HasErr() {
+		return nil, ew.Write()
+	}
+	allData := cv.(map[int]UserShard)
+	data, ok := allData[int(userId.(uint64))]
+
+	if ok {
+		return &data, ew
+	}
+
+	// キャッシュにない場合、DBから探す
+	dbData, ew := this.findByUserId(c, userId, MODE_R)
+	// それでもダメならエラー
+	if ew.HasErr() || dbData.ShardId < 1 {
+		return nil, ew.Write()
+	}
+
+	// 更新しておく
+	allData[data.Id] = *dbData
+	this.SetCache(allData, this.table, "all")
+
+	return dbData, ew
+}
+
+/**************************************************************************************************/
+/*!
+ *  データ取得
+ *
+ *  NOTE : SELECTまでなので、中身までは保証していない
+ *
+ *  \param   c      : コンテキスト
+ *  \param   userId : ユーザID
+ *  \param   mode   : モード
+ *  \return  データ、エラー
+ */
+/**************************************************************************************************/
+func (this *userShardRepo) findByUserId(c *gin.Context, userId interface{}, mode string) (*UserShard, err.ErrWriter) {
+	var userShard UserShard
+
+	// ハンドル取得
+	tx, ew := db.GetTransaction(c, mode, false, 0)
+	if ew.HasErr() {
+		return nil, ew.Write("not found master connection!!")
+	}
+
+	// クエリ生成
+	sql, args, e := builder.Select(this.columns).From(this.table).Where("id = ?", userId).ToSql()
+	if e != nil {
+		return nil, ew.Write("query build error!!", e)
+	}
+
+	// user_shardを検索
+	tx.SelectOne(&userShard, sql, args...)
 	return &userShard, ew
 }
 
@@ -172,7 +273,7 @@ func (this *userShardRepo) FindByUserId(c *gin.Context, userId interface{}, opti
 /**************************************************************************************************/
 func (this *userShardRepo) finds(c *gin.Context, mode string) (*[]UserShard, err.ErrWriter) {
 	// ハンドル取得
-	conn, ew := db.GetDBMasterConnection(c, mode)
+	tx, ew := db.GetTransaction(c, mode, false, 0)
 	if ew.HasErr() {
 		return nil, ew.Write("not found master connection!!")
 	}
@@ -185,7 +286,7 @@ func (this *userShardRepo) finds(c *gin.Context, mode string) (*[]UserShard, err
 
 	// 全取得
 	var allData []UserShard
-	_, e = conn.Select(&allData, sql, args...)
+	_, e = tx.Select(&allData, sql, args...)
 	if e != nil {
 		return nil, ew.Write("select shard error!!", e)
 	}

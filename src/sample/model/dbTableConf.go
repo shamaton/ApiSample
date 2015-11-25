@@ -10,7 +10,6 @@ import (
 
 	"sample/common/db"
 	"sample/common/err"
-	"sample/common/log"
 	. "sample/conf"
 )
 
@@ -111,7 +110,7 @@ func (this *dbTableConfRepo) finds(c *gin.Context) (*[]DbTableConf, err.ErrWrite
 	var datas []DbTableConf
 
 	// ハンドル取得
-	conn, ew := db.GetDBMasterConnection(c, MODE_R)
+	tx, ew := db.GetTransaction(c, MODE_R, false, 0)
 	if ew.HasErr() {
 		return nil, ew.Write("not found master connection!!")
 	}
@@ -122,7 +121,7 @@ func (this *dbTableConfRepo) finds(c *gin.Context) (*[]DbTableConf, err.ErrWrite
 		return nil, ew.Write("query build error!!")
 	}
 
-	_, e = conn.Select(&datas, sql, args...)
+	_, e = tx.Select(&datas, sql, args...)
 	if e != nil {
 		return nil, ew.Write("not found db table conf!!")
 	}

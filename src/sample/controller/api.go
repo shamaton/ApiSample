@@ -114,8 +114,25 @@ func TestUserCreate(c *gin.Context) {
 		return
 	}
 
+	userShardRepo := model.NewUserShardRepo()
+	userRepo := model.NewUserRepo()
+
 	// NOTE : 一度しか生成できない
 	userId := uint64(4)
+
+	// 存在確認
+	isExist, ew := userShardRepo.IsExistByUserId(c, userId)
+	if ew.HasErr() {
+		errorJson(c, "shard id exist check error ", ew.Write())
+		return
+	}
+	// すでに存在している
+	if isExist {
+		log.Info("this user already exist")
+		user := userRepo.FindById(c, userId, model.Option{"mode": MODE_W})
+		c.JSON(http.StatusOK, user)
+		return
+	}
 
 	// ユーザ登録するshardを選択して登録
 	shardId, ew := model.NewUserShardWeightRepo().ChoiceShardId(c)
@@ -125,7 +142,6 @@ func TestUserCreate(c *gin.Context) {
 	}
 	log.Info(shardId)
 
-	userShardRepo := model.NewUserShardRepo()
 	userShard := &model.UserShard{Id: int(userId), ShardId: shardId}
 	ew = userShardRepo.Create(c, userShard)
 	if ew.HasErr() {
@@ -143,8 +159,6 @@ func TestUserCreate(c *gin.Context) {
 	time.Sleep(500 * time.Millisecond)
 
 	// CREATE
-	userRepo := model.NewUserRepo()
-
 	newUser := &model.User{Id: userId, Name: json.Name}
 	ew = userRepo.Create(c, newUser)
 	if ew.HasErr() {
