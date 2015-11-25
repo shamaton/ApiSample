@@ -10,6 +10,9 @@ package model
 import (
 	"sample/common/err"
 
+	"reflect"
+	"sample/common/db"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -57,8 +60,15 @@ func (r *shardRepo) FindShardId(c *gin.Context, st int, value interface{}, optio
 		}
 		shardId = userShard.ShardId
 
-	//case shardTypeGroup:
-	// TODO:実装
+	case shardTypeGroup:
+		// とりあえず数値を想定しておく
+		ref := reflect.ValueOf(value)
+		if ref.Kind() == reflect.Int {
+			v := value.(int)
+			shardId = (v % len(db.GetShardIds())) + 1
+		} else {
+			ew.Write("type not int!!")
+		}
 
 	default:
 		ew.Write("undefined shard type!!")
