@@ -15,7 +15,7 @@ import (
 
 	"reflect"
 
-	db "sample/DBI"
+	"sample/common/db"
 	"sample/common/err"
 	"sample/common/log"
 	. "sample/conf"

@@ -23,8 +23,8 @@ import (
 
 	"sample/common/err"
 	"sample/common/log"
+	"sample/common/redis"
 	. "sample/conf"
-	"sample/logic"
 	"sample/model"
 
 	"time"
@@ -368,7 +368,7 @@ func TestUserMisc(c *gin.Context) {
 		log.Debug(str, " : ", param)
 	}
 
-	redisRepo := logic.NewRedisRepo()
+	redisRepo := redis.NewRedisRepo()
 
 	// 期限切れの場合もある
 	var oldb string
@@ -378,7 +378,7 @@ func TestUserMisc(c *gin.Context) {
 	// set
 	redisRepo.Set(c, "test_key1", 777)
 	redisRepo.Set(c, "test_key2", 1234)
-	redisRepo.Set(c, "test_key3", "logic test", logic.RedisOption{"NX": true, "EX": 10})
+	redisRepo.Set(c, "test_key3", "logic test", redis.RedisOption{"NX": true, "EX": 10})
 
 	user := &model.User{Id: 777, Name: "hoge", Score: 123, CreatedAt: time.Now()}
 	redisRepo.Set(c, "test_key4", user)
@@ -417,7 +417,7 @@ func TestUserMisc(c *gin.Context) {
 
 	// ranking
 	scores := map[string]int{"a": 2, "b": 1, "c": 4, "d": 3, "e": 5}
-	redisRepo.ZAdd(c, "ranking", "f", 10, logic.RedisOption{"NX": true})
+	redisRepo.ZAdd(c, "ranking", "f", 10, redis.RedisOption{"NX": true})
 	redisRepo.ZAdds(c, "ranking", scores)
 
 	// commit

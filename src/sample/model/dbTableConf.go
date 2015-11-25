@@ -8,7 +8,7 @@ import (
 	builder "github.com/Masterminds/squirrel"
 	"github.com/gin-gonic/gin"
 
-	"sample/DBI"
+	"sample/common/db"
 	"sample/common/err"
 	. "sample/conf"
 )
@@ -110,7 +110,7 @@ func (this *dbTableConfRepo) finds(c *gin.Context) (*[]DbTableConf, err.ErrWrite
 	var datas []DbTableConf
 
 	// ハンドル取得
-	conn, ew := DBI.GetDBMasterConnection(c, MODE_R)
+	conn, ew := db.GetDBMasterConnection(c, MODE_R)
 	if ew.HasErr() {
 		return nil, ew.Write("not found master connection!!")
 	}

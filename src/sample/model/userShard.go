@@ -12,7 +12,7 @@ import (
 	builder "github.com/Masterminds/squirrel"
 	"github.com/gin-gonic/gin"
 
-	"sample/DBI"
+	"sample/common/db"
 	"sample/common/log"
 
 	"sample/common/err"
@@ -78,7 +78,7 @@ func (this *userShardRepo) Create(c *gin.Context, userShard *UserShard) err.ErrW
 	}
 
 	// get master tx
-	tx, ew := DBI.GetTransaction(c, MODE_W, false, 0)
+	tx, ew := db.GetTransaction(c, MODE_W, false, 0)
 	if ew.HasErr() {
 		return ew.Write("transaction error!!")
 	}
@@ -115,7 +115,7 @@ func (this *userShardRepo) FindByUserId(c *gin.Context, userId interface{}, opti
 
 	if mode == MODE_W {
 		// ハンドル取得
-		conn, ew := DBI.GetDBMasterConnection(c, mode)
+		conn, ew := db.GetDBMasterConnection(c, mode)
 		if ew.HasErr() {
 			return nil, ew.Write("not found master connection!!")
 		}
@@ -157,7 +157,7 @@ func (this *userShardRepo) FindByUserId(c *gin.Context, userId interface{}, opti
 /**************************************************************************************************/
 func (this *userShardRepo) finds(c *gin.Context, mode string) (*[]UserShard, err.ErrWriter) {
 	// ハンドル取得
-	conn, ew := DBI.GetDBMasterConnection(c, mode)
+	conn, ew := db.GetDBMasterConnection(c, mode)
 	if ew.HasErr() {
 		return nil, ew.Write("not found master connection!!")
 	}

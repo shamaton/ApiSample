@@ -1,4 +1,5 @@
 package controller
+
 /**************************************************************************************************/
 /*!
  *  base.go
@@ -11,9 +12,9 @@ package controller
 import (
 	"github.com/gin-gonic/gin"
 
-	db "sample/DBI"
+	db "sample/common/db"
 	"sample/common/err"
-	"sample/logic"
+	"sample/common/redis"
 )
 
 /**************************************************************************************************/
@@ -48,7 +49,7 @@ func dbRollback(c *gin.Context) err.ErrWriter {
  */
 /**************************************************************************************************/
 func redisExec(c *gin.Context) err.ErrWriter {
-	_, ew := logic.NewRedisRepo().Exec(c)
+	_, ew := redis.NewRedisRepo().Exec(c)
 	if ew.HasErr() {
 		ew.Write()
 	}
@@ -61,7 +62,7 @@ func redisExec(c *gin.Context) err.ErrWriter {
  */
 /**************************************************************************************************/
 func redisDiscard(c *gin.Context) err.ErrWriter {
-	ew := logic.NewRedisRepo().Discard(c)
+	ew := redis.NewRedisRepo().Discard(c)
 	if ew.HasErr() {
 		ew.Write()
 	}

@@ -9,24 +9,21 @@ package main
  */
 /**************************************************************************************************/
 import (
+	"math/rand"
+	"os"
 	"time"
 
+	"github.com/BurntSushi/toml"
+	log "github.com/cihub/seelog"
+	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/context"
 
-	log "github.com/cihub/seelog"
-
-	"math/rand"
-	"os"
-
-	"github.com/BurntSushi/toml"
-	"github.com/garyburd/redigo/redis"
-
-	"sample/DBI"
+	"sample/common/db"
 	"sample/common/err"
+	red "sample/common/redis"
 	ckey "sample/conf/context"
 	"sample/conf/gameConf"
-	"sample/logic"
 )
 
 // global
@@ -43,7 +40,7 @@ func main() {
 	// context
 	ctx = context.Background()
 	ew := err.NewErrWriter()
-	defer DBI.Close(ctx)
+	defer db.Close(ctx)
 
 	setLoggerConfig()
 
@@ -52,11 +49,11 @@ func main() {
 	ctx = context.WithValue(ctx, ckey.GameConfig, gameConf)
 
 	// db
-	ctx, ew = DBI.BuildInstances(ctx)
+	ctx, ew = db.BuildInstances(ctx)
 	if ew.HasErr() {
 		log.Critical(ew.Err()...)
 		log.Critical("init DB failed!!")
-		DBI.Close(ctx)
+		db.Close(ctx)
 		os.Exit(1)
 	}
 
@@ -111,12 +108,12 @@ func Custom() gin.HandlerFunc {
 
 		// リクエスト前処理
 		defer log.Flush()
-		defer DBI.RollBack(c)
-		defer logic.NewRedisRepo().Close(c)
+		defer db.RollBack(c)
+		defer red.NewRedisRepo().Close(c)
 
 		// ランダムシード
 		rand.Seed(time.Now().UnixNano())
-		c.Set(ckey.SlaveIndex, DBI.DecideUseSlave())
+		c.Set(ckey.SlaveIndex, db.DecideUseSlave())
 
 		c.Next()
 
