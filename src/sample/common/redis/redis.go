@@ -29,8 +29,8 @@ import (
 /**
  * オプション用マップ
  */
-type RedisOption map[string]interface{}
-type optionFunc func(RedisOption) ([]interface{}, err.ErrWriter)
+type Option map[string]interface{}
+type optionFunc func(Option) ([]interface{}, err.ErrWriter)
 
 /**
  * redis accessor
@@ -117,7 +117,7 @@ func (this *redisRepo) Set(c *gin.Context, key string, value interface{}, option
  *  \return  オプション配列、失敗時エラー
  */
 /**************************************************************************************************/
-func (this *redisRepo) checkSetOption(option RedisOption) ([]interface{}, err.ErrWriter) {
+func (this *redisRepo) checkSetOption(option Option) ([]interface{}, err.ErrWriter) {
 	ew := err.NewErrWriter()
 	var args []interface{}
 	setNxXx := 0
@@ -351,7 +351,7 @@ func (this *redisRepo) ZAdds(c *gin.Context, key string, scoreMap map[string]int
  *  \return  オプション配列、失敗時エラー
  */
 /**************************************************************************************************/
-func (this *redisRepo) checkZAddOption(option RedisOption) ([]interface{}, err.ErrWriter) {
+func (this *redisRepo) checkZAddOption(option Option) ([]interface{}, err.ErrWriter) {
 	ew := err.NewErrWriter()
 	var args []interface{}
 	setNxXx := 0
@@ -507,8 +507,8 @@ func (this *redisRepo) checkOption(f optionFunc, options []interface{}) ([]inter
 
 	// typeが違うのはダメ
 	switch options[0].(type) {
-	case RedisOption:
-		args, ew := f(options[0].(RedisOption))
+	case Option:
+		args, ew := f(options[0].(Option))
 		if ew.HasErr() {
 			return nil, ew.Write()
 		}
