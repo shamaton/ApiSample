@@ -1,4 +1,12 @@
 package controller
+/**************************************************************************************************/
+/*!
+ *  web.go
+ *
+ *  webに返答が行くサンプル
+ *
+ */
+/**************************************************************************************************/
 
 import (
 	"net/http"
@@ -13,7 +21,7 @@ import (
 	"sample/model"
 )
 
-func Shamoto(c *gin.Context) {
+func WebTest(c *gin.Context) {
 	defer DBI.RollBack(c)
 
 	option := model.Option{"for_update": 1}
