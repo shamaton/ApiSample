@@ -10,6 +10,13 @@ CREATE TABLE `user_shard` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='user sharding table';
 
+DROP TABLE IF EXISTS `user_shard_weight`;
+CREATE TABLE `user_shard_weight` (
+  shard_id tinyint(3) unsigned NOT NULL,
+  weight tinyint(3) unsigned NOT NULL,
+  PRIMARY KEY (`shard_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='user shard weight table';
+
 
 DROP TABLE IF EXISTS `db_table_conf`;
 CREATE TABLE `db_table_conf` (
@@ -32,10 +39,14 @@ INSERT INTO user_shard VALUES (1, 1);
 INSERT INTO user_shard VALUES (2, 2);
 INSERT INTO user_shard VALUES (3, 1);
 
+INSERT INTO user_shard_weight VALUES (1, 1);
+INSERT INTO user_shard_weight VALUES (2, 1);
+
 INSERT INTO db_table_conf VALUES (1, "db_table_conf", 1, 0);
 INSERT INTO db_table_conf VALUES (2, "user_shard", 1, 0);
 INSERT INTO db_table_conf VALUES (3, "user", 2, 1);
 INSERT INTO db_table_conf VALUES (4, "user_item", 2, 1);
 INSERT INTO db_table_conf VALUES (5, "user_test_log", 2, 1);
+INSERT INTO db_table_conf VALUES (6, "user_shard_weight", 1, 0);
 
 COMMIT;

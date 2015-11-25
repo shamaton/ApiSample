@@ -429,10 +429,22 @@ func ShardAllTxStart(c *gin.Context, mode string) err.ErrWriter {
 /**************************************************************************************************/
 func Commit(c *gin.Context) err.ErrWriter {
 	ew := masterCommit(c)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 	ew = shardCommit(c)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 	// slaveでcommitすることはないのでrollbackしておく
 	ew = masterRollback(c, MODE_R)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 	ew = shardRollback(c, MODE_R)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 	return ew
 }
 
@@ -514,9 +526,21 @@ func shardCommit(c *gin.Context) err.ErrWriter {
 /**************************************************************************************************/
 func RollBack(c *gin.Context) err.ErrWriter {
 	ew := masterRollback(c, MODE_W)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 	ew = masterRollback(c, MODE_R)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 	ew = shardRollback(c, MODE_W)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 	ew = shardRollback(c, MODE_R)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 	return ew
 }
 

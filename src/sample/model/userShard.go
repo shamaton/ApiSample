@@ -89,8 +89,6 @@ func (this *userShardRepo) Create(c *gin.Context, userShard *UserShard) err.ErrW
 		return ew.Write("create user shard error!!", e)
 	}
 
-	// TODO:キャッシュを意図的に更新する
-
 	return ew
 }
 
@@ -141,7 +139,24 @@ func (this *userShardRepo) FindByUserId(c *gin.Context, userId interface{}, opti
 			return nil, ew.Write()
 		}
 		allData := cv.(map[int]UserShard)
-		userShard = allData[int(userId.(uint64))]
+		data, ok := allData[int(userId.(uint64))]
+
+		// キャッシュにない場合、DBから探す
+		if !ok {
+			dbData, ew := this.FindByUserId(c, userId, Option{"mode": MODE_W})
+
+			// それでもダメならエラー
+			if ew.HasErr() || dbData.ShardId < 1 {
+				return nil, ew.Write()
+			}
+
+			// 更新しておく
+			userShard = *dbData
+			allData[data.Id] = userShard
+			this.SetCache(allData, this.table, "all")
+		} else {
+			userShard = data
+		}
 	}
 
 	return &userShard, ew

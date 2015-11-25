@@ -118,17 +118,26 @@ func TestUserCreate(c *gin.Context) {
 	userId := uint64(4)
 
 	// ユーザ登録するshardを選択して登録
-	shardId := 1
+	shardId, ew := model.NewUserShardWeightRepo().ChoiceShardId(c)
+	if ew.HasErr() {
+		errorJson(c, "shard id create error ", ew.Write())
+		return
+	}
+	log.Info(shardId)
 
 	userShardRepo := model.NewUserShardRepo()
 	userShard := &model.UserShard{Id: int(userId), ShardId: shardId}
-	ew := userShardRepo.Create(c, userShard)
+	ew = userShardRepo.Create(c, userShard)
 	if ew.HasErr() {
 		errorJson(c, "user shard create error ", ew.Write())
 		return
 	}
 	// シャード生成のため一旦コミット
-	dbCommit(c)
+	ew = dbCommit(c)
+	if ew.HasErr() {
+		errorJson(c, "shard commit error ", ew.Write())
+		return
+	}
 
 	// レプリ待ち
 	time.Sleep(500 * time.Millisecond)
