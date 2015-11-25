@@ -18,6 +18,9 @@ import (
 
 	"sample/common/err"
 
+	"sample/common/log"
+	"sample/conf/gameConf"
+
 	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/context"
@@ -555,7 +558,7 @@ func (this *redisRepo) getConnection(c *gin.Context, key string) redis.Conn {
 	// ない場合取得する
 	if !ok {
 		ctx := c.MustGet(ckey.GContext).(context.Context)
-		pool := ctx.Value(ckey.MemdPool).(*redis.Pool)
+		pool := ctx.Value(ckey.RedisPool).(*redis.Pool)
 		conn = pool.Get()
 		c.Set(key, conn)
 	} else {
@@ -698,7 +701,7 @@ func (this *redisRepo) isTxStart(c *gin.Context) bool {
  *  \return  エラー
  */
 /**************************************************************************************************/
-func (this *redisRepo) Close(c *gin.Context) err.ErrWriter {
+func Close(c *gin.Context) err.ErrWriter {
 
 	// クローズ処理
 	closeFunc := func(key string) err.ErrWriter {
@@ -723,4 +726,59 @@ func (this *redisRepo) Close(c *gin.Context) err.ErrWriter {
 	}
 
 	return ew
+}
+
+/**************************************************************************************************/
+/*!
+ *  初期化
+ *
+ *  \param   ctx : 設定前コンテキスト
+ *  \return  グローバルコンテキスト
+ */
+/**************************************************************************************************/
+func Initialize(ctx context.Context) context.Context {
+	// 初期化済みなら無視
+	i := ctx.Value(ckey.RedisInit)
+	if i != nil && i.(bool) {
+		log.Info("redis already initilized!!")
+		return ctx
+	}
+
+	// redis
+	gc := ctx.Value(ckey.GameConfig).(*gameConf.GameConfig)
+	redis_pool := newPool(gc)
+	ctx = context.WithValue(ctx, ckey.RedisPool, redis_pool)
+	ctx = context.WithValue(ctx, ckey.RedisInit, true)
+	return ctx
+}
+
+/**************************************************************************************************/
+/*!
+ *  プールを取得
+ *
+ *  \param   gameConf : ゲームの設定
+ *  \return  プール
+ */
+/**************************************************************************************************/
+func newPool(gameConf *gameConf.GameConfig) *redis.Pool {
+	// KVSのpoolを取得
+	return &redis.Pool{
+
+		MaxIdle:     3,
+		IdleTimeout: 240 * time.Second,
+
+		Dial: func() (redis.Conn, error) {
+			c, err := redis.Dial("tcp", gameConf.Kvs.Host+":"+gameConf.Kvs.Port)
+
+			if err != nil {
+				return nil, err
+			}
+			return c, err
+		},
+
+		TestOnBorrow: func(c redis.Conn, t time.Time) error {
+			_, err := c.Do("PING")
+			return err
+		},
+	}
 }

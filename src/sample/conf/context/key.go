@@ -13,7 +13,8 @@ const (
 	GameConfig        = "gameConfig"
 
 	// memd
-	MemdPool = "redis"
+	RedisPool = "RedisPool"
+	RedisInit = "RedisInit"
 
 	// DB
 	DbMasterW    = "dbMasterW"

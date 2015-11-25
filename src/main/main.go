@@ -15,13 +15,12 @@ import (
 
 	"github.com/BurntSushi/toml"
 	log "github.com/cihub/seelog"
-	"github.com/garyburd/redigo/redis"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/context"
 
 	"sample/common/db"
 	"sample/common/err"
-	red "sample/common/redis"
+	"sample/common/redis"
 	ckey "sample/conf/context"
 	"sample/conf/gameConf"
 )
@@ -58,8 +57,7 @@ func main() {
 	}
 
 	// redis
-	redis_pool := newPool(gameConf)
-	ctx = context.WithValue(ctx, ckey.MemdPool, redis_pool)
+	ctx = redis.Initialize(ctx)
 
 	router := gin.Default()
 	router.Use(Custom())
@@ -109,7 +107,7 @@ func Custom() gin.HandlerFunc {
 		// リクエスト前処理
 		defer log.Flush()
 		defer db.RollBack(c)
-		defer red.NewRedisRepo().Close(c)
+		defer redis.Close(c)
 
 		// ランダムシード
 		rand.Seed(time.Now().UnixNano())
@@ -177,35 +175,4 @@ func loadGameConfig() *gameConf.GameConfig {
 	}
 
 	return &gameConf
-}
-
-/**************************************************************************************************/
-/*!
- *  redisのプールを取得
- *
- *  \param   gameConf : ゲームの設定
- *  \return  プール
- */
-/**************************************************************************************************/
-func newPool(gameConf *gameConf.GameConfig) *redis.Pool {
-	// KVSのpoolを取得
-	return &redis.Pool{
-
-		MaxIdle:     3,
-		IdleTimeout: 240 * time.Second,
-
-		Dial: func() (redis.Conn, error) {
-			c, err := redis.Dial("tcp", gameConf.Kvs.Host+":"+gameConf.Kvs.Port)
-
-			if err != nil {
-				return nil, err
-			}
-			return c, err
-		},
-
-		TestOnBorrow: func(c redis.Conn, t time.Time) error {
-			_, err := c.Do("PING")
-			return err
-		},
-	}
 }
