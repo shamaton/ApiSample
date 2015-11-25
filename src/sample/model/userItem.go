@@ -57,8 +57,8 @@ func NewUserItemRepo() *userItemRepo {
 /**************************************************************************************************/
 func (this *userItemRepo) FindByPk(c *gin.Context, userId uint64, itemId int, options ...interface{}) *UserItem {
 	userItem := &UserItem{UserId: userId, ItemId: itemId}
-	err := this.Find(c, userItem, options...)
-	if err != nil {
+	ew := this.Find(c, userItem, options...)
+	if ew.HasErr() {
 		return nil
 	}
 	return userItem

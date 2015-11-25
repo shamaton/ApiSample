@@ -1,16 +1,15 @@
 package controller
 
 import (
-	"sample/model"
-
 	"net/http"
-	"sample/DBI"
-
 	"time"
 
-	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 	"github.com/k0kubun/pp"
+
+	"sample/DBI"
+	"sample/common/log"
+	"sample/model"
 )
 
 func Shamoto(c *gin.Context) {

@@ -10,17 +10,16 @@ package model
  */
 /**************************************************************************************************/
 import (
-	"errors"
-	"reflect"
-	db "sample/DBI"
-	"strconv"
-	"strings"
-
-	"fmt"
-
 	builder "github.com/Masterminds/squirrel"
-	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
+
+	"reflect"
+
+	db "sample/DBI"
+	"sample/common/err"
+	"sample/common/log"
+
+	"strings"
 )
 
 // 一旦ここに
@@ -47,17 +46,17 @@ const seqTablePrefix = "seq_"
  * interface
  */
 type baseI interface {
-	Find(*gin.Context, interface{}, ...interface{}) error
-	Finds(*gin.Context, interface{}, Condition, ...interface{}) error
+	Find(*gin.Context, interface{}, ...interface{}) err.ErrWriter
+	Finds(*gin.Context, interface{}, Condition, ...interface{}) err.ErrWriter
 
-	Update(*gin.Context, interface{}, ...interface{}) error
-	Create(*gin.Context, interface{}) error
-	CreateMulti(*gin.Context, interface{}) error
+	Update(*gin.Context, interface{}, ...interface{}) err.ErrWriter
+	Create(*gin.Context, interface{}) err.ErrWriter
+	CreateMulti(*gin.Context, interface{}) err.ErrWriter
 
-	Delete(*gin.Context, interface{}) error
+	Delete(*gin.Context, interface{}) err.ErrWriter
 
-	Count(*gin.Context, Condition, ...interface{}) (int64, error)
-	Save(*gin.Context, interface{}) error
+	Count(*gin.Context, Condition, ...interface{}) (int64, err.ErrWriter)
+	Save(*gin.Context, interface{}) err.ErrWriter
 }
 
 /**************************************************************************************************/
@@ -91,30 +90,31 @@ type base struct {
  *  \return  エラー（正常時はholderにデータを取得する）
  */
 /**************************************************************************************************/
-func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) error {
+func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) err.ErrWriter {
 
 	// optionsの解析
-	mode, isForUpdate, _, _, err := b.optionCheck(options...)
-	if err != nil {
-		log.Error("invalid options set!!")
-		return err
+	mode, isForUpdate, _, _, ew := b.optionCheck(options...)
+	if ew.HasErr() {
+		return ew.Write("invalid options set!!")
 	}
 
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
-	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+	dbTableConf, ew := dbTableConfRepo.Find(c, b.table)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 
 	// holderから各要素を取得
-	columns, _, pkMap, shardKey, err := b.getTableInfoFromStructData(c, holder, dbTableConf, false)
-	if err != nil {
-		log.Error("read error in struct data")
-		return err
+	columns, _, pkMap, shardKey, ew := b.getTableInfoFromStructData(c, holder, dbTableConf, false)
+	if ew.HasErr() {
+		return ew.Write("read error in struct data")
 	}
 
 	// shardの場合、shard_idを取得
-	shardId, err := b.getShardIdByShardKey(c, shardKey, dbTableConf)
-	if err != nil {
-		return err
+	shardId, ew := b.getShardIdByShardKey(c, shardKey, dbTableConf)
+	if ew.HasErr() {
+		return ew.Write()
 	}
 
 	// SQL生成
@@ -124,18 +124,23 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 	if isForUpdate {
 		sb = sb.Suffix("FOR UPDATE")
 	}
-	sql, args, err := sb.ToSql()
+	sql, args, e := sb.ToSql()
+	if e != nil {
+		return ew.Write(e)
+	}
 
 	// fetch
-	tx, err := db.GetTransaction(c, mode, dbTableConf.IsUseTypeShard(), shardId)
-	if err != nil {
-		log.Error("transaction error!!")
-		return err
+	tx, ew := db.GetTransaction(c, mode, dbTableConf.IsUseTypeShard(), shardId)
+	if ew.HasErr() {
+		return ew.Write("transaction error!!")
 	}
-	err = tx.SelectOne(holder, sql, args...)
+	e = tx.SelectOne(holder, sql, args...)
+	if e != nil {
+		return ew.Write("find error!!", e)
+	}
 
 	// TODO:デバッグでは通常selectで複数行取得されないことも確認する
-	return err
+	return ew
 }
 
 /**
@@ -154,40 +159,41 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
  *  \return  エラー（正常時はholdersにデータを取得する）
  */
 /**************************************************************************************************/
-func (b *base) Finds(c *gin.Context, holders interface{}, condition Condition, options ...interface{}) error {
+func (b *base) Finds(c *gin.Context, holders interface{}, condition Condition, options ...interface{}) err.ErrWriter {
 
-	wSql, wArgs, orders, err := b.conditionCheck(condition)
-	if err != nil {
-		log.Error("invalid condition set!!")
-		return err
+	wSql, wArgs, orders, ew := b.conditionCheck(condition)
+	if ew.HasErr() {
+		return ew.Write("invalid condition set!!")
 	}
 
-	mode, _, shardKey, shardId, err := b.optionCheck(options...) // isForUpdateは封印
-	if err != nil {
-		log.Error("invalid options set!!")
-		return err
+	mode, _, shardKey, shardId, ew := b.optionCheck(options...) // isForUpdateは封印
+	if ew.HasErr() {
+		return ew.Write("invalid options set!!")
 	}
 
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
-	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+	dbTableConf, ew := dbTableConfRepo.Find(c, b.table)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 
 	// 構造体のポインタ配列(holder)からカラムを取得する
 	// holdersは配列のポインタであること
 	var structRef reflect.Type
 	hRef := reflect.TypeOf(holders)
 	if hRef.Kind() != reflect.Ptr {
-		return errors.New("holders type is not Ptr!!")
+		return ew.Write("holders type is not Ptr!!")
 	}
 	// 次にスライスであること
 	sRef := hRef.Elem()
 	if sRef.Kind() != reflect.Slice {
-		return errors.New("holders element type is not Slice!!")
+		return ew.Write("holders element type is not Slice!!")
 	}
 	// 最後に構造体であること
 	structRef = sRef.Elem()
 	if structRef.Kind() != reflect.Struct {
-		return errors.New("holders slice element type is not Struct!!")
+		return ew.Write("holders slice element type is not Struct!!")
 	}
 
 	// カラムの取得
@@ -207,9 +213,9 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition Condition, o
 
 	// shardIdをoptionで受け取ってないなら、shardKeyから取得する
 	if shardId == 0 {
-		shardId, err = b.getShardIdByShardKey(c, shardKey, dbTableConf)
-		if err != nil {
-			return err
+		shardId, ew = b.getShardIdByShardKey(c, shardKey, dbTableConf)
+		if ew.HasErr() {
+			return ew.Write()
 		}
 
 	}
@@ -232,18 +238,22 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition Condition, o
 			sb = sb.Suffix("FOR UPDATE")
 		}
 	*/
-	sql, args, err := sb.ToSql()
-	log.Debug(sql)
+	sql, args, e := sb.ToSql()
+	if e != nil {
+		return ew.Write(e)
+	}
 
 	// select
-	tx, err := db.GetTransaction(c, mode, dbTableConf.IsUseTypeShard(), shardId)
-	if err != nil {
-		log.Error("transaction error!!")
-		return err
+	tx, ew := db.GetTransaction(c, mode, dbTableConf.IsUseTypeShard(), shardId)
+	if ew.HasErr() {
+		return ew.Write("transaction error!!")
 	}
-	_, err = tx.Select(holders, sql, args...)
+	_, e = tx.Select(holders, sql, args...)
+	if e != nil {
+		return ew.Write("finds error!!", e)
+	}
 
-	return err
+	return ew
 }
 
 /**
@@ -262,13 +272,11 @@ func (b *base) Finds(c *gin.Context, holders interface{}, condition Condition, o
  *  \return  where文, where引数、orderBy用配列、エラー
  */
 /**************************************************************************************************/
-func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interface{}) error {
-	var err error
+func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interface{}) err.ErrWriter {
 
 	// 過去データは1つしか想定してない
 	if len(prevHolders) > 1 {
-		err = errors.New("enable set 1 prevData only!!")
-		return err
+		return err.NewErrWriter("enable set 1 prevData only!!")
 	}
 
 	// 更新前のデータがある場合比較する
@@ -279,19 +287,21 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
 		if nv.Interface() == pv.Interface() {
 			// 更新の必要なし
 			log.Info("this data is same.")
-			return err
+			return err.NewErrWriter()
 		}
 	}
 
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
-	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+	dbTableConf, ew := dbTableConfRepo.Find(c, b.table)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 
 	// holderから各要素を取得
-	_, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(c, holder, dbTableConf, true)
-	if err != nil {
-		log.Error("read error in struct data")
-		return err
+	_, valueMap, pkMap, shardKey, ew := b.getTableInfoFromStructData(c, holder, dbTableConf, true)
+	if ew.HasErr() {
+		return ew.Write("read error in struct data")
 	}
 
 	// 更新前のデータがある場合、更新すべき値を抽出する
@@ -312,34 +322,34 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
 				delete(valueMap, column)
 				// 空になった時点で更新する必要なし
 				if len(valueMap) < 1 {
-					return nil
+					return ew
 				}
 			}
 		}
 	}
 
 	// shardの場合、shard_idを取得
-	shardId, err := b.getShardIdByShardKey(c, shardKey, dbTableConf)
-	if err != nil {
-		return err
+	shardId, ew := b.getShardIdByShardKey(c, shardKey, dbTableConf)
+	if ew.HasErr() {
+		return ew.Write()
 	}
 
 	// SQL生成
-	sql, args, err := builder.Update(b.table).SetMap(valueMap).Where(pkMap).ToSql()
-	if err != nil {
-		log.Error("sql maker error!!")
-		return err
+	sql, args, e := builder.Update(b.table).SetMap(valueMap).Where(pkMap).ToSql()
+	if e != nil {
+		return ew.Write("sql maker error!!", e)
 	}
 	// tx
-	tx, err := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
-	if err != nil {
-		log.Error("transaction error!!")
-		return err
+	tx, ew := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	if ew.HasErr() {
+		return ew.Write()
 	}
 	// UPDATE(tx.updateはpkに対してまでsetするので使わない)
-	_, err = tx.Exec(sql, args...)
-	return err
-
+	_, e = tx.Exec(sql, args...)
+	if e != nil {
+		return ew.Write("update error!!", e)
+	}
+	return ew
 }
 
 /**
@@ -356,25 +366,25 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
  *  \return  処理失敗時エラー
  */
 /**************************************************************************************************/
-func (b *base) Create(c *gin.Context, holder interface{}) error {
-
-	var err error
+func (b *base) Create(c *gin.Context, holder interface{}) err.ErrWriter {
 
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
-	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+	dbTableConf, ew := dbTableConfRepo.Find(c, b.table)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 
 	// holderから各要素を取得
-	columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(c, holder, dbTableConf, true)
-	if err != nil {
-		log.Error("read error in struct data")
-		return err
+	columns, valueMap, pkMap, shardKey, ew := b.getTableInfoFromStructData(c, holder, dbTableConf, true)
+	if ew.HasErr() {
+		return ew.Write("read error in struct data")
 	}
 
 	// shardの場合、shard_idを取得
-	shardId, err := b.getShardIdByShardKey(c, shardKey, dbTableConf)
-	if err != nil {
-		return err
+	shardId, ew := b.getShardIdByShardKey(c, shardKey, dbTableConf)
+	if ew.HasErr() {
+		return ew.Write()
 	}
 
 	// TODO:pkのチェックするか検討
@@ -387,28 +397,28 @@ func (b *base) Create(c *gin.Context, holder interface{}) error {
 		} else if v, ok := valueMap[column]; ok {
 			values = append(values, v)
 		} else {
-			return errors.New("unknown column found!!")
+			return ew.Write("unknown column found!!")
 		}
 	}
 
 	// SQL生成
 	columnStr := strings.Join(columns, ",")
-	sql, args, err := builder.Insert(b.table).Options("IGNORE").Columns(columnStr).Values(values...).ToSql()
+	sql, args, e := builder.Insert(b.table).Options("IGNORE").Columns(columnStr).Values(values...).ToSql()
 	//sql, args, err := builder.Insert(b.table).Values(values...).ToSql()
-	if err != nil {
-		log.Error("sql maker error!!")
-		return err
+	if e != nil {
+		return ew.Write("sql maker error!!", e)
 	}
 	// tx
-	tx, err := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
-	if err != nil {
-		log.Error("transaction error!!")
-		return err
+	tx, ew := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	if ew.HasErr() {
+		return ew.Write()
 	}
-	// UPDATE(tx.Insertは要マッピングなので使わない)
-	log.Critical(sql, args)
-	_, err = tx.Exec(sql, args...)
-	return err
+	// CREATE(tx.Insertは要マッピングなので使わない)
+	_, e = tx.Exec(sql, args...)
+	if e != nil {
+		return ew.Write("create error!!", e)
+	}
+	return ew
 }
 
 /**
@@ -425,30 +435,32 @@ func (b *base) Create(c *gin.Context, holder interface{}) error {
  *  \return  カラム、pk以外の値、pkのマップ、shard検索キー、エラー
  */
 /**************************************************************************************************/
-func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
-	var err error
+func (b *base) CreateMulti(c *gin.Context, holders interface{}) err.ErrWriter {
 
 	// 参照渡しかチェック
 	hRef := reflect.ValueOf(holders)
 	if hRef.Kind() != reflect.Ptr {
-		return errors.New("holders type is not Ptr!!")
+		return err.NewErrWriter("holders type is not Ptr!!")
 	}
 
 	// スライスかチェック
 	sRef := hRef.Elem()
 	if sRef.Kind() != reflect.Slice {
-		return errors.New("holders Ptr type is not slice!!")
+		return err.NewErrWriter("holders Ptr type is not slice!!")
 	}
 
 	length := sRef.Len()
 	// 空チェック
 	if length < 1 {
-		return errors.New("holder slice invalid length!!")
+		return err.NewErrWriter("holder slice invalid length!!")
 	}
 
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
-	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+	dbTableConf, ew := dbTableConfRepo.Find(c, b.table)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 
 	// テーブルの情報を取得
 	var shardIdMap = map[int]int{} // for check
@@ -458,10 +470,9 @@ func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
 	for i := 0; i < length; i++ {
 		holder := sRef.Index(i).Interface()
 
-		columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(c, holder, dbTableConf, true)
-		if err != nil {
-			log.Error("read error in struct data")
-			return err
+		columns, valueMap, pkMap, shardKey, ew := b.getTableInfoFromStructData(c, holder, dbTableConf, true)
+		if ew.HasErr() {
+			return ew.Write("read error in struct data")
 		}
 
 		// values収集
@@ -472,16 +483,16 @@ func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
 			} else if v, ok := valueMap[column]; ok {
 				values = append(values, v)
 			} else {
-				return errors.New("unknown column found!!")
+				return ew.Write("unknown column found!!")
 			}
 		}
 		allValues = append(allValues, values)
 
 		// shardの場合、shard_idを取得
-		shardId, err = b.getShardIdByShardKey(c, shardKey, dbTableConf)
+		shardId, ew = b.getShardIdByShardKey(c, shardKey, dbTableConf)
 		shardIdMap[shardId] = shardId
-		if err != nil {
-			return err
+		if ew.HasErr() {
+			return ew.Write()
 		}
 
 		// 初回だけ作成
@@ -492,8 +503,7 @@ func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
 
 	// 取得されたshardIDはユニークであること
 	if len(shardIdMap) != 1 {
-		err = errors.New("can not set multi shard id !!")
-		return err
+		return ew.Write("can not set multi shard id !!")
 	}
 
 	// SQL生成
@@ -505,21 +515,22 @@ func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
 		ib = ib.Values(values...)
 	}
 
-	sql, args, err := ib.ToSql()
-	if err != nil {
-		log.Error("sql maker error!!")
-		return err
+	sql, args, e := ib.ToSql()
+	if e != nil {
+		return ew.Write("sql maker error!!", e)
 	}
 	// tx
-	tx, err := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
-	if err != nil {
-		log.Error("transaction error!!")
-		return err
+	tx, ew := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	if ew.HasErr() {
+		return ew.Write()
 	}
-	log.Critical(sql, args)
-	_, err = tx.Exec(sql, args...)
 
-	return err
+	_, e = tx.Exec(sql, args...)
+	if e != nil {
+		return ew.Write("create multi error!!", e)
+	}
+
+	return ew
 }
 
 /**
@@ -536,43 +547,43 @@ func (b *base) CreateMulti(c *gin.Context, holders interface{}) error {
  *  \return  失敗時エラー
  */
 /**************************************************************************************************/
-func (b *base) Delete(c *gin.Context, holder interface{}) error {
-
-	var err error
+func (b *base) Delete(c *gin.Context, holder interface{}) err.ErrWriter {
 
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
-	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+	dbTableConf, ew := dbTableConfRepo.Find(c, b.table)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 
 	// holderから各要素を取得
-	_, _, pkMap, shardKey, err := b.getTableInfoFromStructData(c, holder, dbTableConf, false)
-	if err != nil {
-		log.Error("read error in struct data")
-		return err
+	_, _, pkMap, shardKey, ew := b.getTableInfoFromStructData(c, holder, dbTableConf, false)
+	if ew.HasErr() {
+		return ew.Write("read error in struct data")
 	}
 
 	// shardの場合、shard_idを取得
-	shardId, err := b.getShardIdByShardKey(c, shardKey, dbTableConf)
-	if err != nil {
-		return err
+	shardId, ew := b.getShardIdByShardKey(c, shardKey, dbTableConf)
+	if ew.HasErr() {
+		return ew.Write()
 	}
 
 	// SQL生成
-	sql, args, err := builder.Delete(b.table).Where(pkMap).ToSql()
-	if err != nil {
-		log.Error("sql maker error!!")
-		return err
+	sql, args, e := builder.Delete(b.table).Where(pkMap).ToSql()
+	if e != nil {
+		return ew.Write("sql maker error!!", e)
 	}
 	// tx
-	tx, err := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
-	if err != nil {
-		log.Error("transaction error!!")
-		return err
+	tx, ew := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	if ew.HasErr() {
+		return ew.Write("transaction error!!")
 	}
 	// DELETE
-	log.Critical(sql, args)
-	_, err = tx.Exec(sql, args...)
-	return err
+	_, e = tx.Exec(sql, args...)
+	if e != nil {
+		return ew.Write(e)
+	}
+	return ew
 }
 
 /**
@@ -591,24 +602,26 @@ func (b *base) Delete(c *gin.Context, holder interface{}) error {
  */
 /**************************************************************************************************/
 // TODO : createと共通化
-func (b *base) Save(c *gin.Context, holder interface{}) error {
-	var err error
+func (b *base) Save(c *gin.Context, holder interface{}) err.ErrWriter {
+	ew := err.NewErrWriter()
 
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
-	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+	dbTableConf, ew := dbTableConfRepo.Find(c, b.table)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 
 	// holderから各要素を取得
-	columns, valueMap, pkMap, shardKey, err := b.getTableInfoFromStructData(c, holder, dbTableConf, true)
-	if err != nil {
-		log.Error("read error in struct data")
-		return err
+	columns, valueMap, pkMap, shardKey, ew := b.getTableInfoFromStructData(c, holder, dbTableConf, true)
+	if ew.HasErr() {
+		return ew.Write("read error in struct data")
 	}
 
 	// shardの場合、shard_idを取得
-	shardId, err := b.getShardIdByShardKey(c, shardKey, dbTableConf)
-	if err != nil {
-		return err
+	shardId, ew := b.getShardIdByShardKey(c, shardKey, dbTableConf)
+	if ew.HasErr() {
+		return ew.Write()
 	}
 
 	// TODO:pkのチェックするか検討
@@ -627,7 +640,7 @@ func (b *base) Save(c *gin.Context, holder interface{}) error {
 			dupCols = append(dupCols, column+" = ?")
 			dupValues = append(dupValues, v)
 		} else {
-			return errors.New("unknown column found!!")
+			return err.NewErrWriter("unknown column found!!")
 		}
 	}
 
@@ -637,21 +650,21 @@ func (b *base) Save(c *gin.Context, holder interface{}) error {
 
 	// SQL生成
 	columnStr := strings.Join(columns, ",")
-	sql, args, err := builder.Insert(b.table).Columns(columnStr).Values(values...).Suffix(suffix, dupValues...).ToSql()
-	if err != nil {
-		log.Error("sql maker error!!")
-		return err
+	sql, args, e := builder.Insert(b.table).Columns(columnStr).Values(values...).Suffix(suffix, dupValues...).ToSql()
+	if e != nil {
+		return ew.Write("sql maker error!!", e)
 	}
 	// tx
-	tx, err := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
-	if err != nil {
-		log.Error("transaction error!!")
-		return err
+	tx, ew := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	if ew.HasErr() {
+		return ew.Write("transaction error!!")
 	}
 	// UPDATE(tx.Insertは要マッピングなので使わない)
-	log.Critical(sql, args)
-	_, err = tx.Exec(sql, args...)
-	return err
+	_, e = tx.Exec(sql, args...)
+	if e != nil {
+		return ew.Write("update failed!!", e)
+	}
+	return ew
 }
 
 /**
@@ -669,31 +682,32 @@ func (b *base) Save(c *gin.Context, holder interface{}) error {
  *  \return  失敗時エラー
  */
 /**************************************************************************************************/
-func (b *base) Count(c *gin.Context, condition Condition, options ...interface{}) (int64, error) {
+func (b *base) Count(c *gin.Context, condition Condition, options ...interface{}) (int64, err.ErrWriter) {
 	var count int64
-	var err error
+	ew := err.NewErrWriter()
 
-	wSql, wArgs, orders, err := b.conditionCheck(condition)
-	if err != nil {
-		log.Error("invalid condition set!!")
-		return count, err
+	wSql, wArgs, orders, ew := b.conditionCheck(condition)
+	if ew.HasErr() {
+		return count, ew.Write("invalid condition set!!")
 	}
 
-	mode, _, shardKey, shardId, err := b.optionCheck(options...)
-	if err != nil {
-		log.Error("invalid options set!!")
-		return count, err
+	mode, _, shardKey, shardId, ew := b.optionCheck(options...)
+	if ew.HasErr() {
+		return count, ew.Write("invalid options set!!")
 	}
 
 	// db_table_confから属性を把握
 	dbTableConfRepo := NewDbTableConfRepo()
-	dbTableConf, err := dbTableConfRepo.Find(c, b.table)
+	dbTableConf, ew := dbTableConfRepo.Find(c, b.table)
+	if ew.HasErr() {
+		return count, ew.Write()
+	}
 
 	// shardIdをoptionで受け取ってないなら、shardKeyから取得する
 	if shardId == 0 {
-		shardId, err = b.getShardIdByShardKey(c, shardKey, dbTableConf)
-		if err != nil {
-			return count, err
+		shardId, ew = b.getShardIdByShardKey(c, shardKey, dbTableConf)
+		if ew.HasErr() {
+			return count, ew.Write()
 		}
 	}
 
@@ -708,18 +722,22 @@ func (b *base) Count(c *gin.Context, condition Condition, options ...interface{}
 		sb = sb.OrderBy(orders...)
 	}
 
-	sql, args, err := sb.ToSql()
-	log.Debug(sql)
+	sql, args, e := sb.ToSql()
+	if e != nil {
+		return count, ew.Write("sql error!!", e)
+	}
 
 	// select
-	tx, err := db.GetTransaction(c, mode, dbTableConf.IsUseTypeShard(), shardId)
-	if err != nil {
-		log.Error("transaction error!!")
-		return count, err
+	tx, ew := db.GetTransaction(c, mode, dbTableConf.IsUseTypeShard(), shardId)
+	if ew.HasErr() {
+		return count, ew.Write("transaction error!!")
 	}
-	count, err = tx.SelectInt(sql, args...)
+	count, e = tx.SelectInt(sql, args...)
+	if e != nil {
+		return count, ew.Write("select count failed!!", e)
+	}
 
-	return count, err
+	return count, ew
 }
 
 /**************************************************************************************************/
@@ -732,8 +750,10 @@ func (b *base) Count(c *gin.Context, condition Condition, options ...interface{}
  *  \return  カラム、pk以外の値、pkのマップ、shard検索キー、エラー
  */
 /**************************************************************************************************/
-func (b *base) getTableInfoFromStructData(c *gin.Context, holder interface{}, dbTableConf *DbTableConf, isINSorUPD bool) ([]string, map[string]interface{}, builder.Eq, interface{}, error) {
-	var err error
+func (b *base) getTableInfoFromStructData(
+	c *gin.Context, holder interface{}, dbTableConf *DbTableConf, isINSorUPD bool,
+) ([]string, map[string]interface{}, builder.Eq, interface{}, err.ErrWriter) {
+	ew := err.NewErrWriter()
 
 	var columns []string
 	var shardKey interface{}
@@ -774,9 +794,9 @@ func (b *base) getTableInfoFromStructData(c *gin.Context, holder interface{}, db
 		// シーケンシャルIDで値が設定されてない場合は採番する
 		if isINSorUPD && tag.Get("seq") == "t" {
 			if value.(uint64) < 1 {
-				value, err = b.getSeqId(c)
-				if err != nil {
-					return columns, valueMap, pkMap, shardKey, err
+				value, ew = b.getSeqId(c)
+				if ew.HasErr() {
+					return columns, valueMap, pkMap, shardKey, ew.Write()
 				}
 			}
 		}
@@ -794,8 +814,7 @@ func (b *base) getTableInfoFromStructData(c *gin.Context, holder interface{}, db
 		if dbTableConf.IsUseTypeShard() && tag.Get("shard") == "t" {
 			// 2度設定はダメ
 			if shardKey != nil {
-				err = errors.New("multiple shard key not available!!")
-				return columns, valueMap, pkMap, shardKey, err
+				return columns, valueMap, pkMap, shardKey, ew.Write("multiple shard key not available!!")
 			}
 			shardKey = value
 		}
@@ -803,11 +822,10 @@ func (b *base) getTableInfoFromStructData(c *gin.Context, holder interface{}, db
 
 	// pkMapをチェックしておく
 	if len(pkMap) < 1 {
-		err = errors.New("must be set pks in struct!!")
-		return columns, valueMap, pkMap, shardKey, err
+		return columns, valueMap, pkMap, shardKey, ew.Write("must be set pks in struct!!")
 	}
 
-	return columns, valueMap, pkMap, shardKey, err
+	return columns, valueMap, pkMap, shardKey, ew
 }
 
 /**************************************************************************************************/
@@ -819,27 +837,26 @@ func (b *base) getTableInfoFromStructData(c *gin.Context, holder interface{}, db
  *  \return  カラム、pk以外の値、pkのマップ、shard検索キー、エラー
  */
 /**************************************************************************************************/
-func (b *base) getShardIdByShardKey(c *gin.Context, shardKey interface{}, dbTableConf *DbTableConf) (int, error) {
-	var err error
+func (b *base) getShardIdByShardKey(c *gin.Context, shardKey interface{}, dbTableConf *DbTableConf) (int, err.ErrWriter) {
+	ew := err.NewErrWriter()
 	var shardId int
 
 	// masterの場合は何もしない
 	if dbTableConf.IsUseTypeMaster() {
-		return shardId, err
+		return shardId, ew
 	}
 
 	// value check
 	if shardKey == nil {
-		err = errors.New("not set shard_key!!")
-		return shardId, err
+		return shardId, ew.Write("not set shard_key!!")
 	}
 	// 検索
 	repo := NewShardRepo()
-	shardId, err = repo.FindShardId(c, dbTableConf.ShardType, shardKey)
-	if err != nil {
-		return shardId, err
+	shardId, ew = repo.FindShardId(c, dbTableConf.ShardType, shardKey)
+	if ew.HasErr() {
+		return shardId, ew.Write()
 	}
-	return shardId, err
+	return shardId, ew
 }
 
 /**************************************************************************************************/
@@ -850,8 +867,8 @@ func (b *base) getShardIdByShardKey(c *gin.Context, shardKey interface{}, dbTabl
  *  \return  where文, where引数、orderBy用配列、エラー
  */
 /**************************************************************************************************/
-func (b *base) conditionCheck(condition map[string]interface{}) (string, []interface{}, []string, error) {
-	var err error
+func (b *base) conditionCheck(condition map[string]interface{}) (string, []interface{}, []string, err.ErrWriter) {
+	ew := err.NewErrWriter()
 	var whereSql string
 	var whereArgs []interface{}
 	var orders []string
@@ -860,24 +877,23 @@ func (b *base) conditionCheck(condition map[string]interface{}) (string, []inter
 		switch k {
 		case "where":
 			// where条件解析
-			whereSql, whereArgs, err = b.whereSyntaxAnalyze(v)
-			if err != nil {
-				log.Debug(err)
-				return whereSql, whereArgs, orders, err
+			whereSql, whereArgs, ew = b.whereSyntaxAnalyze(v)
+			if ew.HasErr() {
+				return whereSql, whereArgs, orders, ew.Write()
 			}
 
 		case "order":
 			// order条件解析
-			orders, err = b.orderSyntaxAnalyze(v)
-			if err != nil {
-				return whereSql, whereArgs, orders, err
+			orders, ew = b.orderSyntaxAnalyze(v)
+			if ew.HasErr() {
+				return whereSql, whereArgs, orders, ew.Write()
 			}
 
 		default:
-			err = errors.New("invalid condition type!!")
+			ew.Write("invalid condition type!!")
 		}
 	}
-	return whereSql, whereArgs, orders, err
+	return whereSql, whereArgs, orders, ew
 }
 
 /**************************************************************************************************/
@@ -904,16 +920,15 @@ func (b *base) conditionCheck(condition map[string]interface{}) (string, []inter
 const whereConditionMin = 3 //<! whereConditionの最小長
 const whereConditionMax = 4 //<! whereConditionの最大長
 
-func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) {
-	var err error
+func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, err.ErrWriter) {
+	ew := err.NewErrWriter()
 	var pred string
 	var args []interface{}
 
 	// 型チェック
 	conds, ok := i.(WhereCondition)
 	if !ok {
-		err = errors.New("value is not where type!!")
-		return pred, args, err
+		return pred, args, ew.Write("value is not where type!!")
 	}
 
 	// {"column", "condition", "value", "AND/OR(option)"}
@@ -923,23 +938,20 @@ func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) 
 		// 長さチェック
 		length := len(cond)
 		if !(whereConditionMin <= length && length <= whereConditionMax) {
-			err = errors.New("where condition length error!! : " + strconv.Itoa(length))
-			return pred, args, err
+			return pred, args, ew.Write("where condition length error!! : ", length)
 		}
 
 		// 1 : column (型チェックのみ)
 		column, ok := cond[0].(string)
 		if !ok {
-			err = errors.New("syntax error : column is string only!!")
-			return pred, args, err
+			return pred, args, ew.Write("syntax error : column is string only!!")
 		}
 		allSentence = append(allSentence, column)
 
 		// 2 : 比較条件
 		compare, ok := cond[1].(string)
 		if !ok {
-			err = errors.New("syntax error : compare is string only!!")
-			return pred, args, err
+			return pred, args, ew.Write("syntax error : compare is string only!!")
 		}
 
 		isFind := false
@@ -951,8 +963,7 @@ func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) 
 			}
 		}
 		if !isFind {
-			err = errors.New("syntax error : this word can't use!! " + compare)
-			return pred, args, err
+			return pred, args, ew.Write("syntax error : this word can't use!! " + compare)
 		}
 		allSentence = append(allSentence, compare)
 
@@ -978,13 +989,11 @@ func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) 
 		if length == whereConditionMax {
 			c, ok := cond[3].(string)
 			if !ok {
-				err = errors.New("type error : this cond is and/or only!!")
-				return pred, args, err
+				return pred, args, ew.Write("type error : this cond is and/or only!!")
 			}
 			// 構文チェック
 			if c != "AND" && c != "OR" {
-				err = errors.New("syntax error : this cond is and/or only!!")
-				return pred, args, err
+				return pred, args, ew.Write("syntax error : this cond is and/or only!!")
 			}
 			andOr = c
 		}
@@ -998,7 +1007,7 @@ func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) 
 	// すべてを結合
 	pred = strings.Join(allSentence, " ")
 
-	return pred, args, err
+	return pred, args, ew
 }
 
 /**************************************************************************************************/
@@ -1020,15 +1029,14 @@ func (b *base) whereSyntaxAnalyze(i interface{}) (string, []interface{}, error) 
 /**************************************************************************************************/
 const orderCondition = 2 //<! orderConditionの長さ
 
-func (b *base) orderSyntaxAnalyze(i interface{}) ([]string, error) {
-	var err error
+func (b *base) orderSyntaxAnalyze(i interface{}) ([]string, err.ErrWriter) {
+	ew := err.NewErrWriter()
 	var orders []string
 
 	// 型チェック
 	conds, ok := i.(OrderByCondition)
 	if !ok {
-		err = errors.New("value is not where type!!")
-		return orders, err
+		return orders, ew.Write("value is not where type!!")
 	}
 
 	// ["column", "ASC/DESC"]
@@ -1036,15 +1044,14 @@ func (b *base) orderSyntaxAnalyze(i interface{}) ([]string, error) {
 		// 長さチェック
 		length := len(cond)
 		if length != orderCondition {
-			err = errors.New("order condition length error!! : " + strconv.Itoa(length))
-			return orders, err
+			return orders, ew.Write("order condition length error!! : ", length)
 		}
 		// 構文チェック
 		order := strings.Join(cond, " ")
 		orders = append(orders, order)
 	}
 
-	return orders, err
+	return orders, ew
 }
 
 /**************************************************************************************************/
@@ -1057,8 +1064,8 @@ func (b *base) orderSyntaxAnalyze(i interface{}) ([]string, error) {
  *  \return  モード、ロックするか、エラー
  */
 /**************************************************************************************************/
-func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, int, error) {
-	var err error
+func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, int, err.ErrWriter) {
+	ew := err.NewErrWriter()
 
 	var mode = db.MODE_R
 	var isForUpdate = false
@@ -1075,9 +1082,7 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 			optionMap = v.(Option)
 
 		default:
-			err = errors.New("can not check this type!!")
-			log.Error(v)
-			return mode, isForUpdate, shardKey, shardId, err
+			return mode, isForUpdate, shardKey, shardId, ew.Write("can not check this type!!")
 		}
 	}
 
@@ -1091,8 +1096,7 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 			if str == db.MODE_W || str == db.MODE_R || str == db.MODE_BAK {
 				mode = str
 			} else {
-				err = errors.New("invalid mode!!")
-				break
+				return mode, isForUpdate, shardKey, shardId, ew.Write("invalid mode!!")
 			}
 
 		case "for_update":
@@ -1105,32 +1109,29 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 			value, isInt := v.(int)
 			// 型チェック & 範囲チェック
 			if !isInt {
-				err = errors.New("type not integer!!")
-				return mode, isForUpdate, shardKey, shardId, err
+				return mode, isForUpdate, shardKey, shardId, ew.Write("type not integer!!")
 			} else if value < 1 || value > 2 {
 				// TODO:ちゃんとチェックする
-				err = errors.New("over shard id range!!")
-				return mode, isForUpdate, shardKey, shardId, err
+				return mode, isForUpdate, shardKey, shardId, ew.Write("over shard id range!!")
 			}
 			shardId = v.(int)
 
 		default:
-			err = errors.New("invalid key!!")
+			return mode, isForUpdate, shardKey, shardId, ew.Write("invalid key!!")
 
 		}
 	}
 
 	// shard系は1つのみを想定する
 	if shardKey != nil && shardId > 0 {
-		err = errors.New("can't set shardKey and shardId in optionMap!!")
-		return mode, isForUpdate, shardKey, shardId, err
+		return mode, isForUpdate, shardKey, shardId, ew.Write("can't set shardKey and shardId in optionMap!!")
 	}
 
 	// for updateな場合、MODEは必ずW
 	if isForUpdate {
 		mode = db.MODE_W
 	}
-	return mode, isForUpdate, shardKey, shardId, err
+	return mode, isForUpdate, shardKey, shardId, ew
 }
 
 /**************************************************************************************************/
@@ -1141,14 +1142,14 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
  *  \return  シーケンスID、エラー
  */
 /**************************************************************************************************/
-func (b *base) getSeqId(c *gin.Context) (uint64, error) {
-	seqIds, err := b.getSeqIds(c, 1)
-	if err != nil {
-		return 0, err
+func (b *base) getSeqId(c *gin.Context) (uint64, err.ErrWriter) {
+	seqIds, ew := b.getSeqIds(c, 1)
+	if ew.HasErr() {
+		return 0, ew.Write()
 	}
 	seqId := seqIds[0]
 
-	return seqId, err
+	return seqId, ew
 }
 
 /**************************************************************************************************/
@@ -1160,49 +1161,44 @@ func (b *base) getSeqId(c *gin.Context) (uint64, error) {
  *  \return  シーケンスID、エラー
  */
 /**************************************************************************************************/
-func (b *base) getSeqIds(c *gin.Context, getNum uint64) ([]uint64, error) {
+func (b *base) getSeqIds(c *gin.Context, getNum uint64) ([]uint64, err.ErrWriter) {
 	// seqテーブルは必ずmaster
 	isShard, shardId := false, 0
 
 	// validate
 	if getNum < 1 {
-		err := errors.New(fmt.Sprint("invalid getNum : ", getNum))
-		return nil, err
+		return nil, err.NewErrWriter("invalid getNum : ", getNum)
 	}
 
 	// tx get
-	tx, err := db.GetTransaction(c, db.MODE_W, isShard, shardId)
-	if err != nil {
-		return nil, err
+	tx, ew := db.GetTransaction(c, db.MODE_W, isShard, shardId)
+	if ew.HasErr() {
+		return nil, ew.Write()
 	}
 
 	// table lock
 	seqTableName := seqTablePrefix + b.table
-	_, err = tx.Exec("LOCK TABLES " + seqTableName + " WRITE")
-	if err != nil {
-		log.Error("lock tables error : " + seqTableName)
-		return nil, err
+	_, e := tx.Exec("LOCK TABLES " + seqTableName + " WRITE")
+	if e != nil {
+		return nil, err.NewErrWriter("lock tables error : "+seqTableName, e)
 	}
 
 	// update and select
-	_, err = tx.Exec("UPDATE "+seqTableName+" set id = id + ?", getNum)
-	if err != nil {
-		log.Error("update seq table error : " + seqTableName)
-		return nil, err
+	_, e = tx.Exec("UPDATE "+seqTableName+" set id = id + ?", getNum)
+	if e != nil {
+		return nil, err.NewErrWriter("update seq table error : "+seqTableName, e)
 	}
 
 	var seqId uint64
-	err = tx.SelectOne(&seqId, "select max(id) from "+seqTableName)
-	if err != nil {
-		log.Error("seq select error : " + seqTableName)
-		return nil, err
+	e = tx.SelectOne(&seqId, "select max(id) from "+seqTableName)
+	if e != nil {
+		return nil, err.NewErrWriter("seq select error : "+seqTableName, e)
 	}
 
 	// table unlock
-	_, err = tx.Exec("UNLOCK TABLES")
-	if err != nil {
-		log.Error("unlock tables error : " + seqTableName)
-		return nil, err
+	_, e = tx.Exec("UNLOCK TABLES")
+	if e != nil {
+		return nil, err.NewErrWriter("unlock tables error : "+seqTableName, e)
 	}
 
 	// sedIds生成
@@ -1212,5 +1208,5 @@ func (b *base) getSeqIds(c *gin.Context, getNum uint64) ([]uint64, error) {
 		seqIds = append([]uint64{seqId - i}, seqIds...)
 	}
 
-	return seqIds, err
+	return seqIds, err.NewErrWriter()
 }

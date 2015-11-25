@@ -10,18 +10,18 @@ package DBI
 /**************************************************************************************************/
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"math/rand"
 	"strconv"
 
-	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
 
 	"golang.org/x/net/context"
 	"gopkg.in/gorp.v1"
 
+	"sample/common/err"
+	"sample/common/log"
 	ckey "sample/conf/context"
 	"sample/conf/gameConf"
 )
@@ -58,9 +58,7 @@ const (
  *  \return  ハンドラ登録済みのコンテキスト、エラー
  */
 /**************************************************************************************************/
-func BuildInstances(ctx context.Context) (context.Context, error) {
-	var err error
-
+func BuildInstances(ctx context.Context) (context.Context, err.ErrWriter) {
 	gc := ctx.Value(ckey.GameConfig).(*gameConf.GameConfig)
 
 	// make shards
@@ -69,31 +67,31 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
 	}
 
 	// master - master
-	masterW, err := getWriteMaster(gc)
+	masterW, ew := getWriteMaster(gc)
 	ctx = context.WithValue(ctx, ckey.DbMasterW, masterW)
-	if err != nil {
-		return ctx, err
+	if ew.HasErr() {
+		return ctx, ew.Write()
 	}
 
 	// master - shard
-	shardWMap, err := getWriteShard(gc)
+	shardWMap, ew := getWriteShard(gc)
 	ctx = context.WithValue(ctx, ckey.DbShardWMap, shardWMap)
-	if err != nil {
-		return ctx, err
+	if ew.HasErr() {
+		return ctx, ew.Write()
 	}
 
 	// slave master
-	masterRs, err := getReadOnlyMaster(gc)
+	masterRs, ew := getReadOnlyMaster(gc)
 	ctx = context.WithValue(ctx, ckey.DbMasterRs, masterRs)
-	if err != nil {
-		return ctx, err
+	if ew.HasErr() {
+		return ctx, ew.Write()
 	}
 
 	// slave shard
-	shardRMaps, err := getReadOnlyShard(gc)
+	shardRMaps, ew := getReadOnlyShard(gc)
 	ctx = context.WithValue(ctx, ckey.DbShardRMaps, shardRMaps)
-	if err != nil {
-		return ctx, err
+	if ew.HasErr() {
+		return ctx, ew.Write()
 	}
 
 	// slaveの選択比重
@@ -105,7 +103,7 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
 
 	// TODO:BAK MODE
 
-	return ctx, err
+	return ctx, ew
 }
 
 /**************************************************************************************************/
@@ -116,13 +114,13 @@ func BuildInstances(ctx context.Context) (context.Context, error) {
  *  \return  DbMap, エラー
  */
 /**************************************************************************************************/
-func getWriteMaster(gc *gameConf.GameConfig) (*gorp.DbMap, error) {
-	dbMap, err := getDbMap(gc.Db, gc.Server.Host, gc.Server.Port, "game_master")
-	if err != nil {
+func getWriteMaster(gc *gameConf.GameConfig) (*gorp.DbMap, err.ErrWriter) {
+	dbMap, ew := getDbMap(gc.Db, gc.Server.Host, gc.Server.Port, "game_master")
+	if ew.HasErr() {
 		log.Critical("master : game_master setup failed!!")
-		return nil, err
+		return nil, ew
 	}
-	return dbMap, nil
+	return dbMap, err.NewErrWriter()
 }
 
 /**************************************************************************************************/
@@ -133,31 +131,28 @@ func getWriteMaster(gc *gameConf.GameConfig) (*gorp.DbMap, error) {
  *  \return  map[shard_id]DbMap, エラー
  */
 /**************************************************************************************************/
-func getWriteShard(gc *gameConf.GameConfig) (map[int]*gorp.DbMap, error) {
-
+func getWriteShard(gc *gameConf.GameConfig) (map[int]*gorp.DbMap, err.ErrWriter) {
+	ew := err.NewErrWriter()
 	var shardMap = map[int]*gorp.DbMap{}
-	var err error
 
 	for _, shardId := range shardIds {
 		// database
 		dbName := "game_shard_" + strconv.Itoa(shardId)
 
 		// mapping
-		shardMap[shardId], err = getDbMap(gc.Db, gc.Server.Host, gc.Server.Port, dbName)
+		shardMap[shardId], ew = getDbMap(gc.Db, gc.Server.Host, gc.Server.Port, dbName)
 
 		// error
-		if err != nil {
-			log.Critical("master : " + dbName + " setup failed!!")
-
+		if ew.HasErr() {
 			// すでに成功しているものをクローズする
 			for _, dbMap := range shardMap {
 				dbMap.Db.Close()
 			}
 
-			return nil, err
+			return nil, ew.Write("master : " + dbName + " setup failed!!")
 		}
 	}
-	return shardMap, nil
+	return shardMap, ew
 }
 
 /**************************************************************************************************/
@@ -168,7 +163,7 @@ func getWriteShard(gc *gameConf.GameConfig) (map[int]*gorp.DbMap, error) {
  *  \return  [slave_index]DbMap, エラー
  */
 /**************************************************************************************************/
-func getReadOnlyMaster(gc *gameConf.GameConfig) ([]*gorp.DbMap, error) {
+func getReadOnlyMaster(gc *gameConf.GameConfig) ([]*gorp.DbMap, err.ErrWriter) {
 
 	var masterRs []*gorp.DbMap
 
@@ -181,27 +176,26 @@ func getReadOnlyMaster(gc *gameConf.GameConfig) ([]*gorp.DbMap, error) {
 
 	for _, slaveConf := range gc.Server.Slave {
 		// mapping
-		masterR, err := getDbMap(gc.Db, slaveConf.Host, slaveConf.Port, "game_master")
+		masterR, ew := getDbMap(gc.Db, slaveConf.Host, slaveConf.Port, "game_master")
 
 		// error
-		if err != nil {
-			log.Critical("slave : game_master setup failed!!")
+		if ew.HasErr() {
 			errorFunc(masterRs)
-			return nil, err
+			return nil, ew.Write("slave : game_master setup failed!!")
 		}
 
 		// SET READ ONLY
-		_, err = masterR.Exec("SET TRANSACTION READ ONLY")
-		if err != nil {
-			log.Critical("slave : game_master transaction setting failed!!")
+		_, e := masterR.Exec("SET TRANSACTION READ ONLY")
+		if e != nil {
+			log.Critical()
 			errorFunc(masterRs)
-			return nil, err
+			return nil, ew.Write("slave : game_master transaction setting failed!!", e)
 		}
 
 		// add slave masters
 		masterRs = append(masterRs, masterR)
 	}
-	return masterRs, nil
+	return masterRs, err.NewErrWriter()
 }
 
 /**************************************************************************************************/
@@ -212,7 +206,7 @@ func getReadOnlyMaster(gc *gameConf.GameConfig) ([]*gorp.DbMap, error) {
  *  \return  [slave_index]map[shard_id]DbMap, エラー
  */
 /**************************************************************************************************/
-func getReadOnlyShard(gc *gameConf.GameConfig) ([]map[int]*gorp.DbMap, error) {
+func getReadOnlyShard(gc *gameConf.GameConfig) ([]map[int]*gorp.DbMap, err.ErrWriter) {
 
 	var shardMaps []map[int]*gorp.DbMap
 
@@ -234,27 +228,25 @@ func getReadOnlyShard(gc *gameConf.GameConfig) ([]map[int]*gorp.DbMap, error) {
 			dbName := "game_shard_" + strconv.Itoa(shardId)
 
 			// mapping
-			db, err := getDbMap(gc.Db, slaveConf.Host, slaveConf.Port, dbName)
+			db, ew := getDbMap(gc.Db, slaveConf.Host, slaveConf.Port, dbName)
 
 			// error
-			if err != nil {
-				log.Critical("slave : " + dbName + " setup failed!!")
+			if ew.HasErr() {
 				errorFunc(shardMaps)
-				return nil, err
+				return nil, ew.Write("slave : " + dbName + " setup failed!!")
 			}
 
-			_, err = db.Exec("SET TRANSACTION READ ONLY")
-			if err != nil {
-				log.Critical("slave : " + dbName + " transaction setting failed!!")
+			_, e := db.Exec("SET TRANSACTION READ ONLY")
+			if e != nil {
 				errorFunc(shardMaps)
-				return nil, err
+				return nil, ew.Write("slave : "+dbName+" transaction setting failed!!", e)
 			}
 			shardMap[shardId] = db
 		}
 		shardMaps = append(shardMaps, shardMap)
 
 	}
-	return shardMaps, nil
+	return shardMaps, err.NewErrWriter()
 }
 
 /**************************************************************************************************/
@@ -264,19 +256,18 @@ func getReadOnlyShard(gc *gameConf.GameConfig) ([]map[int]*gorp.DbMap, error) {
  *  \return  使用するslaveのindex
  */
 /**************************************************************************************************/
-func getDbMap(dbConf gameConf.DbConfig, host, port, dbName string) (*gorp.DbMap, error) {
+func getDbMap(dbConf gameConf.DbConfig, host, port, dbName string) (*gorp.DbMap, err.ErrWriter) {
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8&parseTime=true&loc=Local", dbConf.User, dbConf.Pass, host, port, dbName)
 
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		log.Critical(err)
-		return nil, err
+	db, e := sql.Open("mysql", dsn)
+	if e != nil {
+		return nil, err.NewErrWriter(e)
 	}
 
 	// construct a gorp DbMap
 	dbmap := &gorp.DbMap{Db: db, Dialect: gorp.MySQLDialect{"InnoDB", "UTF8"}}
-	return dbmap, nil
+	return dbmap, err.NewErrWriter()
 }
 
 /**************************************************************************************************/
@@ -295,12 +286,12 @@ func DecideUseSlave() int {
 /*!
  *  クローズ処理
  *
- *  \return  失敗時エラー
+ *  失敗しても処理を続ける
+ *
+ *  \return  なし
  */
 /**************************************************************************************************/
-func Close(ctx context.Context) error {
-
-	//ctx := c.Value(ckey.GContext).(context.Context)
+func Close(ctx context.Context) {
 
 	// write master
 	masterW, ok := ctx.Value(ckey.DbMasterW).(*gorp.DbMap)
@@ -333,7 +324,6 @@ func Close(ctx context.Context) error {
 			}
 		}
 	}
-	return nil
 }
 
 /**
@@ -347,8 +337,7 @@ func Close(ctx context.Context) error {
  *  \return  エラー
  */
 /**************************************************************************************************/
-func MasterTxStart(c *gin.Context, mode string) error {
-	var err error
+func MasterTxStart(c *gin.Context, mode string) err.ErrWriter {
 
 	isKey, txKey := ckey.IsMasterRTxStart, ckey.TxMasterR
 	if mode == MODE_W {
@@ -357,26 +346,26 @@ func MasterTxStart(c *gin.Context, mode string) error {
 
 	// すでに開始中の場合は何もしない
 	if isTransactonStart(c, isKey) {
-		return nil
+		return err.NewErrWriter()
 	}
 
 	// dbハンドル取得
-	db, err := GetDBMasterConnection(c, mode)
-	if err != nil {
-		return err
+	db, ew := GetDBMasterConnection(c, mode)
+	if ew.HasErr() {
+		return ew.Write()
 	}
 
 	// transaction start
 	tx, err := db.Begin()
 	if err != nil {
-		return err
+		return ew.Write(err)
 	}
 
 	// リクエストコンテキストに保存
 	c.Set(txKey, tx)
 	c.Set(isKey, true)
 
-	return err
+	return ew
 }
 
 /**************************************************************************************************/
@@ -387,8 +376,7 @@ func MasterTxStart(c *gin.Context, mode string) error {
  *  \return  エラー
  */
 /**************************************************************************************************/
-func ShardAllTxStart(c *gin.Context, mode string) error {
-	var err error
+func ShardAllTxStart(c *gin.Context, mode string) err.ErrWriter {
 
 	isKey, txKey := ckey.IsShardRTxStart, ckey.TxShardRMap
 	if mode == MODE_W {
@@ -397,23 +385,23 @@ func ShardAllTxStart(c *gin.Context, mode string) error {
 
 	// すでに開始中の場合は何もしない
 	if isTransactonStart(c, isKey) {
-		return nil
+		return err.NewErrWriter()
 	}
 
 	// dbハンドルマップを取得
-	dbMap, err := GetDBShardMap(c, mode)
-	if err != nil {
-		return err
+	dbMap, ew := GetDBShardMap(c, mode)
+	if ew.HasErr() {
+		return ew.Write()
 	}
 
 	var txMap = map[int]*gorp.Transaction{}
 	// txのマップを作成
 	for k, v := range dbMap {
-		tx, err := v.Begin()
+		tx, e := v.Begin()
 
 		// エラーが起きた時点でおかしいのでreturn
-		if err != nil {
-			return err
+		if e != nil {
+			return ew.Write(e)
 		}
 		txMap[k] = tx
 	}
@@ -422,7 +410,7 @@ func ShardAllTxStart(c *gin.Context, mode string) error {
 	c.Set(txKey, txMap)
 	c.Set(isKey, true)
 
-	return err
+	return ew
 }
 
 /**
@@ -436,13 +424,13 @@ func ShardAllTxStart(c *gin.Context, mode string) error {
  *  \return  エラー
  */
 /**************************************************************************************************/
-func Commit(c *gin.Context) error {
-	err := masterCommit(c)
-	err = shardCommit(c)
+func Commit(c *gin.Context) err.ErrWriter {
+	ew := masterCommit(c)
+	ew = shardCommit(c)
 	// slaveでcommitすることはないのでrollbackしておく
-	err = masterRollback(c, MODE_R)
-	err = shardRollback(c, MODE_R)
-	return err
+	ew = masterRollback(c, MODE_R)
+	ew = shardRollback(c, MODE_R)
+	return ew
 }
 
 /**************************************************************************************************/
@@ -453,21 +441,23 @@ func Commit(c *gin.Context) error {
  *  \return  エラー
  */
 /**************************************************************************************************/
-func masterCommit(c *gin.Context) error {
-	var err error
+func masterCommit(c *gin.Context) err.ErrWriter {
+	var e error
 	iFace, valid := c.Get(ckey.TxMasterW)
 
 	if valid && iFace != nil {
 		tx := iFace.(*gorp.Transaction)
-		err = tx.Commit()
+		e = tx.Commit()
 
 		// エラーじゃなければ削除
-		if err == nil {
+		if e == nil {
 			c.Set(ckey.TxMasterW, nil)
 			c.Set(ckey.IsMasterWTxStart, false)
+		} else {
+			return err.NewErrWriter(e)
 		}
 	}
-	return err
+	return err.NewErrWriter()
 }
 
 /**************************************************************************************************/
@@ -478,8 +468,8 @@ func masterCommit(c *gin.Context) error {
  *  \return  エラー
  */
 /**************************************************************************************************/
-func shardCommit(c *gin.Context) error {
-	var err error
+func shardCommit(c *gin.Context) err.ErrWriter {
+	var e error
 	var hasError = false
 
 	iFace, valid := c.Get(ckey.TxShardWMap)
@@ -488,10 +478,12 @@ func shardCommit(c *gin.Context) error {
 		// 取得してすべてcommitする
 		txMap := iFace.(map[int]*gorp.Transaction)
 		for k, v := range txMap {
-			err = v.Commit()
+			e = v.Commit()
 			// 正常な場合、削除する
-			if err == nil {
+			if e == nil {
 				delete(txMap, k)
+			} else {
+				hasError = true
 			}
 		}
 
@@ -499,9 +491,11 @@ func shardCommit(c *gin.Context) error {
 		if !hasError {
 			c.Set(ckey.TxShardWMap, nil)
 			c.Set(ckey.IsShardWTxStart, false)
+		} else {
+			return err.NewErrWriter(e)
 		}
 	}
-	return err
+	return err.NewErrWriter()
 }
 
 /**
@@ -515,12 +509,12 @@ func shardCommit(c *gin.Context) error {
  *  \return  エラー
  */
 /**************************************************************************************************/
-func RollBack(c *gin.Context) error {
-	err := masterRollback(c, MODE_W)
-	err = masterRollback(c, MODE_R)
-	err = shardRollback(c, MODE_W)
-	err = shardRollback(c, MODE_R)
-	return err
+func RollBack(c *gin.Context) err.ErrWriter {
+	ew := masterRollback(c, MODE_W)
+	ew = masterRollback(c, MODE_R)
+	ew = shardRollback(c, MODE_W)
+	ew = shardRollback(c, MODE_R)
+	return ew
 }
 
 /**************************************************************************************************/
@@ -532,8 +526,8 @@ func RollBack(c *gin.Context) error {
  *  \return  エラー
  */
 /**************************************************************************************************/
-func masterRollback(c *gin.Context, mode string) error {
-	var err error
+func masterRollback(c *gin.Context, mode string) err.ErrWriter {
+	var e error
 
 	isKey, txKey := ckey.IsMasterRTxStart, ckey.TxMasterR
 	if mode == MODE_W {
@@ -544,15 +538,17 @@ func masterRollback(c *gin.Context, mode string) error {
 
 	if valid && iFace != nil {
 		tx := iFace.(*gorp.Transaction)
-		err = tx.Rollback()
+		e = tx.Rollback()
 
 		// エラーじゃなければ削除
-		if err == nil {
+		if e == nil {
 			c.Set(txKey, nil)
 			c.Set(isKey, false)
+		} else {
+			return err.NewErrWriter(e)
 		}
 	}
-	return err
+	return err.NewErrWriter()
 }
 
 /**************************************************************************************************/
@@ -564,8 +560,8 @@ func masterRollback(c *gin.Context, mode string) error {
  *  \return  エラー
  */
 /**************************************************************************************************/
-func shardRollback(c *gin.Context, mode string) error {
-	var err error
+func shardRollback(c *gin.Context, mode string) err.ErrWriter {
+	var e error
 	var hasError = false
 
 	isKey, txKey := ckey.IsShardRTxStart, ckey.TxShardRMap
@@ -579,10 +575,12 @@ func shardRollback(c *gin.Context, mode string) error {
 		// 取得してすべてrollbackする
 		txMap := iFace.(map[int]*gorp.Transaction)
 		for k, v := range txMap {
-			err = v.Rollback()
+			e = v.Rollback()
 			// 正常な場合、削除する
-			if err == nil {
+			if e == nil {
 				delete(txMap, k)
+			} else {
+				hasError = true
 			}
 		}
 
@@ -590,9 +588,11 @@ func shardRollback(c *gin.Context, mode string) error {
 		if !hasError {
 			c.Set(txKey, nil)
 			c.Set(isKey, false)
+		} else {
+			return err.NewErrWriter(e)
 		}
 	}
-	return err
+	return err.NewErrWriter()
 }
 
 /**
@@ -608,19 +608,17 @@ func shardRollback(c *gin.Context, mode string) error {
  *  \return  トランザクション、エラー
  */
 /**************************************************************************************************/
-func GetTransaction(c *gin.Context, mode string, isShard bool, shardId int) (*gorp.Transaction, error) {
-	var err error
+func GetTransaction(c *gin.Context, mode string, isShard bool, shardId int) (*gorp.Transaction, err.ErrWriter) {
 	var tx *gorp.Transaction
 
 	switch isShard {
 	case true:
 		// shard
 		// トランザクションを開始してない場合、中で開始する
-		err = ShardAllTxStart(c, mode)
+		ew := ShardAllTxStart(c, mode)
 
-		if err != nil {
-			log.Error("shard transaction start failed!!")
-			return tx, err
+		if ew.HasErr() {
+			return nil, ew.Write("shard transaction start failed!!")
 		}
 
 		// context key
@@ -639,11 +637,10 @@ func GetTransaction(c *gin.Context, mode string, isShard bool, shardId int) (*go
 	case false:
 		// master
 		// トランザクションを開始してない場合、開始する
-		err = MasterTxStart(c, mode)
+		ew := MasterTxStart(c, mode)
 
-		if err != nil {
-			log.Error("master transaction start failed!!")
-			return tx, err
+		if ew.HasErr() {
+			return nil, ew.Write("master transaction start failed!!")
 		}
 
 		// context key
@@ -662,12 +659,12 @@ func GetTransaction(c *gin.Context, mode string, isShard bool, shardId int) (*go
 		// to do nothing
 	}
 
+	ew := err.NewErrWriter()
 	if tx == nil {
-		err = errors.New("not found transaction!!")
-		log.Error(err)
+		return nil, ew.Write("not found transaction!!")
 	}
 
-	return tx, err
+	return tx, ew
 }
 
 /**************************************************************************************************/
@@ -701,27 +698,27 @@ func isTransactonStart(c *gin.Context, key string) bool {
  *  \return  DBハンドル、エラー
  */
 /**************************************************************************************************/
-func GetDBConnection(c *gin.Context, mode string, isShard bool, shardId int) (*gorp.DbMap, error) {
-	var err error
+func GetDBConnection(c *gin.Context, mode string, isShard bool, shardId int) (*gorp.DbMap, err.ErrWriter) {
+	ew := err.NewErrWriter()
 	var conn *gorp.DbMap
 
 	switch isShard {
 	case true:
 		// shard
-		conn, err = GetDBShardConnection(c, mode, shardId)
+		conn, ew = GetDBShardConnection(c, mode, shardId)
 
 	case false:
 		// master
-		conn, err = GetDBMasterConnection(c, mode)
+		conn, ew = GetDBMasterConnection(c, mode)
 
 	default:
 		// to do nothing
 	}
 
 	if conn == nil {
-		err = errors.New("not found db connection!!")
+		return nil, ew.Write("not found db connection!!")
 	}
-	return conn, err
+	return conn, ew
 }
 
 /**************************************************************************************************/
@@ -733,9 +730,9 @@ func GetDBConnection(c *gin.Context, mode string, isShard bool, shardId int) (*g
  *  \return  DBハンドル、エラー
  */
 /**************************************************************************************************/
-func GetDBMasterConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
+func GetDBMasterConnection(c *gin.Context, mode string) (*gorp.DbMap, err.ErrWriter) {
 	var conn *gorp.DbMap
-	var err error
+	ew := err.NewErrWriter()
 
 	gc := c.Value(ckey.GContext).(context.Context)
 
@@ -752,15 +749,15 @@ func GetDBMasterConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
 	// TODO:実装
 
 	default:
-		err = errors.New("invalid mode!!")
+		return nil, ew.Write("invalid mode!!")
 	}
 
 	//
 	if conn == nil {
-		err = errors.New("connection is nil!!")
+		return nil, ew.Write("connection is nil!!")
 	}
 
-	return conn, err
+	return conn, ew
 }
 
 /**************************************************************************************************/
@@ -773,13 +770,12 @@ func GetDBMasterConnection(c *gin.Context, mode string) (*gorp.DbMap, error) {
  *  \return  DBハンドル、エラー
  */
 /**************************************************************************************************/
-func GetDBShardConnection(c *gin.Context, mode string, shardId int) (*gorp.DbMap, error) {
+func GetDBShardConnection(c *gin.Context, mode string, shardId int) (*gorp.DbMap, err.ErrWriter) {
 	var conn *gorp.DbMap
-	var err error
 
 	shardMap, err := GetDBShardMap(c, mode)
-	if err != nil {
-		return nil, err
+	if err.Err() != nil {
+		return nil, err.Write()
 	}
 	conn = shardMap[shardId]
 
@@ -795,8 +791,8 @@ func GetDBShardConnection(c *gin.Context, mode string, shardId int) (*gorp.DbMap
  *  \return  DBハンドルマップ、エラー
  */
 /**************************************************************************************************/
-func GetDBShardMap(c *gin.Context, mode string) (map[int]*gorp.DbMap, error) {
-	var err error
+func GetDBShardMap(c *gin.Context, mode string) (map[int]*gorp.DbMap, err.ErrWriter) {
+	ew := err.NewErrWriter()
 	var shardMap map[int]*gorp.DbMap
 
 	gc := c.Value(ckey.GContext).(context.Context)
@@ -814,13 +810,13 @@ func GetDBShardMap(c *gin.Context, mode string) (map[int]*gorp.DbMap, error) {
 	// TODO:実装
 
 	default:
-		err = errors.New("invalid mode!!")
+		return nil, ew.Write("invalid mode!!")
 	}
 
 	// 存在確認
 	if shardMap == nil {
-		err = errors.New("shardMap is nil!!")
+		return nil, ew.Write("shardMap is nil!!")
 	}
 
-	return shardMap, err
+	return shardMap, ew
 }

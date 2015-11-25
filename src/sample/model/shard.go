@@ -8,9 +8,8 @@ package model
 /**************************************************************************************************/
 
 import (
-	"errors"
+	"sample/common/err"
 
-	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,7 +17,7 @@ import (
  * interface
  */
 type shardRepoI interface {
-	FindShardId(*gin.Context, int, interface{}, ...interface{}) (int, error)
+	FindShardId(*gin.Context, int, interface{}, ...interface{}) (int, err.ErrWriter)
 }
 
 /**
@@ -45,17 +44,16 @@ func NewShardRepo() shardRepoI {
  *  \return  shard ID、エラー
  */
 /**************************************************************************************************/
-func (r *shardRepo) FindShardId(c *gin.Context, st int, value interface{}, options ...interface{}) (int, error) {
+func (r *shardRepo) FindShardId(c *gin.Context, st int, value interface{}, options ...interface{}) (int, err.ErrWriter) {
 	var shardId int
-	var err error
+	ew := err.NewErrWriter()
 
 	switch st {
 	case shardTypeUser:
 		userShardRepo := NewUserShardRepo()
-		userShard, err := userShardRepo.FindByUserId(c, value, options...)
-		if err != nil {
-			log.Error("error : find by user...")
-			return shardId, err
+		userShard, ew := userShardRepo.FindByUserId(c, value, options...)
+		if ew.HasErr() {
+			return shardId, ew.Write("error : find by user...")
 		}
 		shardId = userShard.ShardId
 
@@ -63,8 +61,8 @@ func (r *shardRepo) FindShardId(c *gin.Context, st int, value interface{}, optio
 	// TODO:実装
 
 	default:
-		err = errors.New("undefined shard type!!")
+		ew.Write("undefined shard type!!")
 	}
 
-	return shardId, err
+	return shardId, ew
 }

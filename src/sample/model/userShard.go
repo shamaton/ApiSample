@@ -9,11 +9,13 @@ package model
  */
 /**************************************************************************************************/
 import (
-	"sample/DBI"
-
 	builder "github.com/Masterminds/squirrel"
-	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
+
+	"sample/DBI"
+	"sample/common/log"
+
+	"sample/common/err"
 )
 
 /**
@@ -29,9 +31,9 @@ type UserShard struct {
  * Interface
  */
 type userShardRepoI interface {
-	FindByUserId(*gin.Context, interface{}, ...interface{}) (*UserShard, error)
+	FindByUserId(*gin.Context, interface{}, ...interface{}) (*UserShard, err.ErrWriter)
 
-	Create(*gin.Context, *UserShard) error
+	Create(*gin.Context, *UserShard) err.ErrWriter
 }
 
 /**
@@ -67,31 +69,28 @@ func NewUserShardRepo() userShardRepoI {
  *  \return  失敗時、エラー
  */
 /**************************************************************************************************/
-func (this *userShardRepo) Create(c *gin.Context, userShard *UserShard) error {
+func (this *userShardRepo) Create(c *gin.Context, userShard *UserShard) err.ErrWriter {
 	// SQL生成
-	sql, args, err := builder.Insert("user_shard").Options("IGNORE").Values(userShard.Id, userShard.ShardId).ToSql()
-	if err != nil {
-		log.Error("sql maker error!!")
-		return err
+	sql, args, e := builder.Insert("user_shard").Options("IGNORE").Values(userShard.Id, userShard.ShardId).ToSql()
+	if e != nil {
+		return err.NewErrWriter("sql maker error!!", e)
 	}
 
 	// get master tx
-	tx, err := DBI.GetTransaction(c, DBI.MODE_W, false, 0)
-	if err != nil {
-		log.Error("transaction error!!")
-		return err
+	tx, ew := DBI.GetTransaction(c, DBI.MODE_W, false, 0)
+	if ew.HasErr() {
+		return ew.Write("transaction error!!")
 	}
 
 	// create
-	log.Critical(sql, args)
-	_, err = tx.Exec(sql, args...)
-	if err != nil {
-		return err
+	_, e = tx.Exec(sql, args...)
+	if e != nil {
+		return ew.Write("create user shard error!!", e)
 	}
 
 	// TODO:キャッシュを意図的に更新する
 
-	return nil
+	return ew
 }
 
 /**************************************************************************************************/
@@ -103,52 +102,48 @@ func (this *userShardRepo) Create(c *gin.Context, userShard *UserShard) error {
  *  \return  shard ID、エラー
  */
 /**************************************************************************************************/
-func (this *userShardRepo) FindByUserId(c *gin.Context, userId interface{}, options ...interface{}) (*UserShard, error) {
-	var err error
+func (this *userShardRepo) FindByUserId(c *gin.Context, userId interface{}, options ...interface{}) (*UserShard, err.ErrWriter) {
 	var userShard UserShard
 
 	// optionsの解析
 	b := base{}
-	mode, _, _, _, err := b.optionCheck(options...)
-	if err != nil {
-		log.Error("invalid options set!!")
-		return nil, err
+	mode, _, _, _, ew := b.optionCheck(options...)
+	if ew.HasErr() {
+		return nil, ew.Write("invalid options set!!")
 	}
 
 	if mode == DBI.MODE_W {
 		// ハンドル取得
-		conn, err := DBI.GetDBMasterConnection(c, mode)
-		if err != nil {
-			log.Error("not found master connection!!")
-			return nil, err
+		conn, ew := DBI.GetDBMasterConnection(c, mode)
+		if ew.HasErr() {
+			return nil, ew.Write("not found master connection!!")
 		}
 
 		// クエリ生成
-		sql, args, err := builder.Select(this.columns).From(this.table).Where("id = ?", userId).ToSql()
-		if err != nil {
-			log.Error("query build error!!")
-			return nil, err
+		sql, args, e := builder.Select(this.columns).From(this.table).Where("id = ?", userId).ToSql()
+		if e != nil {
+			return nil, ew.Write("query build error!!", e)
 		}
 
 		// user_shardを検索
-		err = conn.SelectOne(&userShard, sql, args...)
-		if err != nil {
-			return nil, err
+		e = conn.SelectOne(&userShard, sql, args...)
+		if e != nil {
+			return nil, ew.Write("select shard error!!", e)
 		}
 		// ユーザー生成していない場合があるので、エラーにはしない
 		if userShard.ShardId < 1 {
 			log.Info("not found user shard id")
 		}
 	} else {
-		cv, err := this.GetCacheWithSetter(c, this.cacheSetter, this.table, "all")
-		if err != nil {
-			return nil, err
+		cv, ew := this.GetCacheWithSetter(c, this.cacheSetter, this.table, "all")
+		if ew.HasErr() {
+			return nil, ew.Write()
 		}
 		allData := cv.(map[int]UserShard)
 		userShard = allData[int(userId.(uint64))]
 	}
 
-	return &userShard, err
+	return &userShard, ew
 }
 
 /**************************************************************************************************/
@@ -159,28 +154,26 @@ func (this *userShardRepo) FindByUserId(c *gin.Context, userId interface{}, opti
  *  \return  全データ、エラー
  */
 /**************************************************************************************************/
-func (this *userShardRepo) finds(c *gin.Context, mode string) (*[]UserShard, error) {
+func (this *userShardRepo) finds(c *gin.Context, mode string) (*[]UserShard, err.ErrWriter) {
 	// ハンドル取得
-	conn, err := DBI.GetDBMasterConnection(c, mode)
-	if err != nil {
-		log.Error("not found master connection!!")
-		return nil, err
+	conn, ew := DBI.GetDBMasterConnection(c, mode)
+	if ew.HasErr() {
+		return nil, ew.Write("not found master connection!!")
 	}
 
 	// クエリ生成
-	sql, args, err := builder.Select("id, shard_id").From("user_shard").ToSql()
-	if err != nil {
-		log.Error("query build error!!")
-		return nil, err
+	sql, args, e := builder.Select("id, shard_id").From("user_shard").ToSql()
+	if e != nil {
+		return nil, ew.Write("query build error!!", e)
 	}
 
 	// 全取得
 	var allData []UserShard
-	_, err = conn.Select(&allData, sql, args...)
-	if err != nil {
-		return nil, err
+	_, e = conn.Select(&allData, sql, args...)
+	if e != nil {
+		return nil, ew.Write("select shard error!!", e)
 	}
-	return &allData, nil
+	return &allData, ew
 }
 
 /**************************************************************************************************/
@@ -191,10 +184,10 @@ func (this *userShardRepo) finds(c *gin.Context, mode string) (*[]UserShard, err
  *  \return  cacheGetしたものと同等のデータ、エラー
  */
 /**************************************************************************************************/
-func (this *userShardRepo) cacheSetter(c *gin.Context) (interface{}, error) {
-	allData, err := this.finds(c, DBI.MODE_R)
-	if err != nil {
-		return nil, err
+func (this *userShardRepo) cacheSetter(c *gin.Context) (interface{}, err.ErrWriter) {
+	allData, ew := this.finds(c, DBI.MODE_R)
+	if ew.HasErr() {
+		return nil, ew.Write()
 	}
 	// マップ生成
 	dataMap := map[int]UserShard{}
@@ -203,5 +196,5 @@ func (this *userShardRepo) cacheSetter(c *gin.Context) (interface{}, error) {
 	}
 	this.SetCache(dataMap, this.table, "all")
 
-	return dataMap, nil
+	return dataMap, ew
 }

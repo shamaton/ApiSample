@@ -11,8 +11,9 @@ package model
 import (
 	"time"
 
-	"github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
+
+	"sample/common/log"
 )
 
 /**
@@ -57,8 +58,8 @@ func NewUserRepo() *userRepo {
 func (r *userRepo) FindById(c *gin.Context, id uint64, options ...interface{}) *User {
 	var user = new(User)
 	user.Id = id
-	err := r.Find(c, user, options...)
-	if err != nil {
+	ew := r.Find(c, user, options...)
+	if ew.HasErr() {
 		return nil
 	}
 	return user
@@ -82,9 +83,9 @@ func (this *userRepo) FindsTest(c *gin.Context) {
 	var option = Option{"shard_id": 1}
 
 	this.Finds(c, &users, condition, option)
-	seelog.Debug(&users)
+	log.Debug(&users)
 
 	var hoges []User
 	this.Finds(c, &hoges, Condition{}, option)
-	seelog.Debug(&hoges)
+	log.Debug(&hoges)
 }
