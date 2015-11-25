@@ -44,8 +44,7 @@ func main() {
 	setLoggerConfig()
 
 	// game config
-	gameConf := loadGameConfig()
-	ctx = context.WithValue(ctx, ckey.GameConfig, gameConf)
+	ctx = loadGameConfig(ctx)
 
 	// db
 	ctx, ew = db.BuildInstances(ctx)
@@ -149,7 +148,7 @@ func setLoggerConfig() {
  *  \return  gameConfig
  */
 /**************************************************************************************************/
-func loadGameConfig() *gameConf.GameConfig {
+func loadGameConfig(ctx context.Context) context.Context {
 	var gameConf gameConf.GameConfig
 
 	gameMode := os.Getenv("GAMEMODE")
@@ -174,5 +173,6 @@ func loadGameConfig() *gameConf.GameConfig {
 		os.Exit(1)
 	}
 
-	return &gameConf
+	ctx = context.WithValue(ctx, ckey.GameConfig, &gameConf)
+	return ctx
 }
