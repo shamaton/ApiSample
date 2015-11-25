@@ -5,8 +5,6 @@ package context
  */
 type ContextKey string
 
-// TODO:リクエストコンテキストとグローバルコンテキストで分ける
-
 /**
  * グローバルコンテキスト
  */
