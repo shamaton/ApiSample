@@ -13,11 +13,10 @@ import (
 
 	"time"
 
-	"sample/logic"
-
-	"sample/common/log"
-
 	"sample/common/err"
+	"sample/common/log"
+	. "sample/conf"
+	"sample/logic"
 
 	"github.com/gin-gonic/gin"
 	"github.com/k0kubun/pp"
@@ -57,7 +56,7 @@ func TestUserSelect(c *gin.Context) {
 	log.Debug(pp.Println(user))
 
 	// FIND(USE OPTION)
-	var option = model.Option{"mode": db.MODE_W}
+	var option = model.Option{"mode": MODE_W}
 	user = userRepo.FindById(c, 2, option)
 	if user == nil {
 		errorJson(c, "user find_by_id(use option) error", err.NewErrWriter().Write())
@@ -254,14 +253,14 @@ func TestUserItemDelete(c *gin.Context) {
 	userItemRepo := model.NewUserItemRepo()
 
 	// 確認して削除
-	userItem := userItemRepo.FindByPk(c, json.UserId, json.ItemId, model.Option{"mode": db.MODE_W})
+	userItem := userItemRepo.FindByPk(c, json.UserId, json.ItemId, model.Option{"mode": MODE_W})
 	if userItem == nil {
 		errorJson(c, "not found user item!! ", err.NewErrWriter().Write())
 		return
 	}
 
 	// LOCK
-	userItem = userItemRepo.FindByPk(c, json.UserId, json.ItemId, model.Option{"mode": db.MODE_W, "for_update": 1})
+	userItem = userItemRepo.FindByPk(c, json.UserId, json.ItemId, model.Option{"mode": MODE_W, "for_update": 1})
 	if userItem == nil {
 		errorJson(c, "not found user item!! ", err.NewErrWriter().Write())
 		return

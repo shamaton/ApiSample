@@ -18,6 +18,7 @@ import (
 	db "sample/DBI"
 	"sample/common/err"
 	"sample/common/log"
+	. "sample/conf"
 
 	"strings"
 )
@@ -340,7 +341,7 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
 		return ew.Write("sql maker error!!", e)
 	}
 	// tx
-	tx, ew := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	tx, ew := db.GetTransaction(c, MODE_W, dbTableConf.IsUseTypeShard(), shardId)
 	if ew.HasErr() {
 		return ew.Write()
 	}
@@ -409,7 +410,7 @@ func (b *base) Create(c *gin.Context, holder interface{}) err.ErrWriter {
 		return ew.Write("sql maker error!!", e)
 	}
 	// tx
-	tx, ew := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	tx, ew := db.GetTransaction(c, MODE_W, dbTableConf.IsUseTypeShard(), shardId)
 	if ew.HasErr() {
 		return ew.Write()
 	}
@@ -520,7 +521,7 @@ func (b *base) CreateMulti(c *gin.Context, holders interface{}) err.ErrWriter {
 		return ew.Write("sql maker error!!", e)
 	}
 	// tx
-	tx, ew := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	tx, ew := db.GetTransaction(c, MODE_W, dbTableConf.IsUseTypeShard(), shardId)
 	if ew.HasErr() {
 		return ew.Write()
 	}
@@ -574,7 +575,7 @@ func (b *base) Delete(c *gin.Context, holder interface{}) err.ErrWriter {
 		return ew.Write("sql maker error!!", e)
 	}
 	// tx
-	tx, ew := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	tx, ew := db.GetTransaction(c, MODE_W, dbTableConf.IsUseTypeShard(), shardId)
 	if ew.HasErr() {
 		return ew.Write("transaction error!!")
 	}
@@ -655,7 +656,7 @@ func (b *base) Save(c *gin.Context, holder interface{}) err.ErrWriter {
 		return ew.Write("sql maker error!!", e)
 	}
 	// tx
-	tx, ew := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	tx, ew := db.GetTransaction(c, MODE_W, dbTableConf.IsUseTypeShard(), shardId)
 	if ew.HasErr() {
 		return ew.Write("transaction error!!")
 	}
@@ -1067,7 +1068,7 @@ func (b *base) orderSyntaxAnalyze(i interface{}) ([]string, err.ErrWriter) {
 func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, int, err.ErrWriter) {
 	ew := err.NewErrWriter()
 
-	var mode = db.MODE_R
+	var mode = MODE_R
 	var isForUpdate = false
 	var shardKey interface{}
 	var shardId int
@@ -1093,7 +1094,7 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 		switch k {
 		case "mode":
 			str := v.(string)
-			if str == db.MODE_W || str == db.MODE_R || str == db.MODE_BAK {
+			if str == MODE_W || str == MODE_R || str == MODE_BAK {
 				mode = str
 			} else {
 				return mode, isForUpdate, shardKey, shardId, ew.Write("invalid mode!!")
@@ -1129,7 +1130,7 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 
 	// for updateな場合、MODEは必ずW
 	if isForUpdate {
-		mode = db.MODE_W
+		mode = MODE_W
 	}
 	return mode, isForUpdate, shardKey, shardId, ew
 }
@@ -1171,7 +1172,7 @@ func (b *base) getSeqIds(c *gin.Context, getNum uint64) ([]uint64, err.ErrWriter
 	}
 
 	// tx get
-	tx, ew := db.GetTransaction(c, db.MODE_W, isShard, shardId)
+	tx, ew := db.GetTransaction(c, MODE_W, isShard, shardId)
 	if ew.HasErr() {
 		return nil, ew.Write()
 	}

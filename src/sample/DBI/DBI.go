@@ -22,6 +22,7 @@ import (
 
 	"sample/common/err"
 	"sample/common/log"
+	. "sample/conf"
 	ckey "sample/conf/context"
 	"sample/conf/gameConf"
 )
@@ -29,15 +30,6 @@ import (
 var (
 	slaveWeights []int
 	shardIds     []int
-)
-
-/**
- * DB MODE
- */
-const (
-	MODE_W   = "W"   // master
-	MODE_R   = "R"   // slave
-	MODE_BAK = "BAK" // backup
 )
 
 /**************************************************************************************************/

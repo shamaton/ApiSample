@@ -10,6 +10,7 @@ import (
 
 	"sample/DBI"
 	"sample/common/err"
+	. "sample/conf"
 )
 
 /**
@@ -109,7 +110,7 @@ func (this *dbTableConfRepo) finds(c *gin.Context) (*[]DbTableConf, err.ErrWrite
 	var datas []DbTableConf
 
 	// ハンドル取得
-	conn, ew := DBI.GetDBMasterConnection(c, DBI.MODE_R)
+	conn, ew := DBI.GetDBMasterConnection(c, MODE_R)
 	if ew.HasErr() {
 		return nil, ew.Write("not found master connection!!")
 	}

@@ -16,6 +16,7 @@ import (
 	"sample/common/log"
 
 	"sample/common/err"
+	. "sample/conf"
 )
 
 /**
@@ -77,7 +78,7 @@ func (this *userShardRepo) Create(c *gin.Context, userShard *UserShard) err.ErrW
 	}
 
 	// get master tx
-	tx, ew := DBI.GetTransaction(c, DBI.MODE_W, false, 0)
+	tx, ew := DBI.GetTransaction(c, MODE_W, false, 0)
 	if ew.HasErr() {
 		return ew.Write("transaction error!!")
 	}
@@ -112,7 +113,7 @@ func (this *userShardRepo) FindByUserId(c *gin.Context, userId interface{}, opti
 		return nil, ew.Write("invalid options set!!")
 	}
 
-	if mode == DBI.MODE_W {
+	if mode == MODE_W {
 		// ハンドル取得
 		conn, ew := DBI.GetDBMasterConnection(c, mode)
 		if ew.HasErr() {
@@ -185,7 +186,7 @@ func (this *userShardRepo) finds(c *gin.Context, mode string) (*[]UserShard, err
  */
 /**************************************************************************************************/
 func (this *userShardRepo) cacheSetter(c *gin.Context) (interface{}, err.ErrWriter) {
-	allData, ew := this.finds(c, DBI.MODE_R)
+	allData, ew := this.finds(c, MODE_R)
 	if ew.HasErr() {
 		return nil, ew.Write()
 	}

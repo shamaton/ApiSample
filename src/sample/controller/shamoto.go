@@ -9,6 +9,7 @@ import (
 
 	"sample/DBI"
 	"sample/common/log"
+	. "sample/conf"
 	"sample/model"
 )
 
@@ -29,7 +30,7 @@ func Shamoto(c *gin.Context) {
 	user.Score += 1000
 	userRepo.Update(c, user)
 
-	option = model.Option{"mode": DBI.MODE_W}
+	option = model.Option{"mode": MODE_W}
 	logRepo := model.NewUserTestLogRepo()
 	userLog := logRepo.FindByID(c, 1, option)
 	if userLog == nil {
