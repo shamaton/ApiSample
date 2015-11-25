@@ -145,7 +145,7 @@ func setLoggerConfig() {
 /*!
  *  アプリの設定をロードする
  *
- *  \return  gameConfig
+ *  \return  グローバルコンテキスト
  */
 /**************************************************************************************************/
 func loadGameConfig(ctx context.Context) context.Context {
