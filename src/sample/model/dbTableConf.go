@@ -55,7 +55,7 @@ type dbTableConfRepoI interface {
 type dbTableConfRepo struct {
 	table   string
 	columns string
-	cacheI
+	CacheI
 }
 
 /**************************************************************************************************/
@@ -68,7 +68,7 @@ func NewDbTableConfRepo() dbTableConfRepoI {
 	repo := &dbTableConfRepo{
 		table:   "db_table_conf",
 		columns: "id, table_name, use_type, shard_type",
-		cacheI:  cacheRepo,
+		CacheI:  cacheRepo,
 	}
 	return repo
 }

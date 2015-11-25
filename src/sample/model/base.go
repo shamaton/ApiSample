@@ -46,7 +46,7 @@ const seqTablePrefix = "seq_"
 /**
  * interface
  */
-type baseI interface {
+type BaseI interface {
 	Find(*gin.Context, interface{}, ...interface{}) err.ErrWriter
 	Finds(*gin.Context, interface{}, Condition, ...interface{}) err.ErrWriter
 
@@ -65,7 +65,7 @@ type baseI interface {
  *  リポジトリ操作オブジェクトの生成
  */
 /**************************************************************************************************/
-func NewBase(tableName string) baseI {
+func NewBase(tableName string) BaseI {
 	return &base{table: tableName}
 }
 

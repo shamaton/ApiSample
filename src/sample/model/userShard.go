@@ -43,7 +43,7 @@ type userShardRepoI interface {
 type userShardRepo struct {
 	table   string
 	columns string
-	cacheI
+	CacheI
 }
 
 /**************************************************************************************************/
@@ -56,7 +56,7 @@ func NewUserShardRepo() userShardRepoI {
 	repo := &userShardRepo{
 		table:   "user_shard",
 		columns: "id, shard_id",
-		cacheI:  cache,
+		CacheI:  cache,
 	}
 	return repo
 }

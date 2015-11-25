@@ -29,7 +29,7 @@ type UserTestLog struct {
  * db accessor
  */
 type userTestLogRepo struct {
-	baseI
+	BaseI
 }
 
 /**************************************************************************************************/
