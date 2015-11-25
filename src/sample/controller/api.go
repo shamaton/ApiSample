@@ -1,4 +1,5 @@
 package controller
+
 /**************************************************************************************************/
 /*!
  *  api.go
@@ -10,24 +11,23 @@ package controller
 
 import (
 	"net/http"
-	"sample/model"
 
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	db "sample/DBI"
 
-	"time"
+	"github.com/gin-gonic/gin"
+	"github.com/k0kubun/pp"
 
 	"sample/common/err"
 	"sample/common/log"
 	. "sample/conf"
 	"sample/logic"
+	"sample/model"
 
-	"github.com/gin-gonic/gin"
-	"github.com/k0kubun/pp"
+	"time"
 )
 
 type postData struct {
@@ -128,7 +128,7 @@ func TestUserCreate(c *gin.Context) {
 		return
 	}
 	// シャード生成のため一旦コミット
-	db.Commit(c)
+	dbCommit(c)
 
 	// レプリ待ち
 	time.Sleep(500 * time.Millisecond)
@@ -143,7 +143,10 @@ func TestUserCreate(c *gin.Context) {
 		return
 	}
 	// COMMIT
-	db.Commit(c)
+	ew = dbCommit(c)
+	if ew.HasErr() {
+		errorJson(c, "commit error!! ", ew.Write())
+	}
 
 	c.JSON(http.StatusOK, newUser)
 }
@@ -194,8 +197,12 @@ func TestUserUpdate(c *gin.Context) {
 		errorJson(c, "user update error!!", ew.Write())
 		return
 	}
+
 	// COMMIT
-	db.Commit(c)
+	ew = dbCommit(c)
+	if ew.HasErr() {
+		errorJson(c, "commit error!! ", ew.Write())
+	}
 
 	c.JSON(http.StatusOK, user)
 }
@@ -234,7 +241,10 @@ func TestUserItemCreate(c *gin.Context) {
 		return
 	}
 
-	db.Commit(c)
+	ew = dbCommit(c)
+	if ew.HasErr() {
+		errorJson(c, "commit error!! ", ew.Write())
+	}
 
 	c.JSON(http.StatusOK, saveData)
 }
@@ -281,7 +291,10 @@ func TestUserItemDelete(c *gin.Context) {
 		return
 	}
 
-	db.Commit(c)
+	ew = dbCommit(c)
+	if ew.HasErr() {
+		errorJson(c, "commit error!! ", ew.Write())
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "delete OK"})
 }
@@ -336,7 +349,10 @@ func TestUserLogCreate(c *gin.Context) {
 	}
 
 	// COMMIT
-	db.Commit(c)
+	ew = dbCommit(c)
+	if ew.HasErr() {
+		errorJson(c, "commit error!! ", ew.Write())
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "log creates done"})
 }
@@ -368,7 +384,7 @@ func TestUserMisc(c *gin.Context) {
 	redisRepo.Set(c, "test_key4", user)
 
 	// 一旦exec
-	redisRepo.Exec(c)
+	redisExec(c)
 
 	// getしてみる
 	var t int
@@ -405,7 +421,7 @@ func TestUserMisc(c *gin.Context) {
 	redisRepo.ZAdds(c, "ranking", scores)
 
 	// commit
-	redisRepo.Exec(c)
+	redisExec(c)
 
 	score, _ := redisRepo.ZScore(c, "ranking", "a")
 	l("ranking score", score)
@@ -422,7 +438,7 @@ func TestUserMisc(c *gin.Context) {
 
 	// discard
 	redisRepo.Set(c, "discard_test", 1)
-	redisRepo.Discard(c)
+	redisDiscard(c)
 
 	var discard int
 	redisRepo.Get(c, "discard_test", &discard)

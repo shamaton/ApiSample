@@ -1,4 +1,5 @@
 package controller
+
 /**************************************************************************************************/
 /*!
  *  web.go
@@ -15,14 +16,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/k0kubun/pp"
 
-	"sample/DBI"
 	"sample/common/log"
 	. "sample/conf"
 	"sample/model"
 )
 
 func WebTest(c *gin.Context) {
-	defer DBI.RollBack(c)
 
 	option := model.Option{"for_update": 1}
 	userRepo := model.NewUserRepo()
@@ -46,7 +45,7 @@ func WebTest(c *gin.Context) {
 	}
 	log.Info(pp.Println(userLog))
 
-	DBI.Commit(c)
+	dbCommit(c)
 
 	c.String(http.StatusOK, "hi!!")
 }
