@@ -26,6 +26,9 @@ _testmain.go
 # 実行ファイル除外
 bin/
 
+# 外部パッケージ
+lib/_vendor/
+
 # エディタ(intellj)
 .idea/
 *.iml
