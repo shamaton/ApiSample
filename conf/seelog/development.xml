@@ -5,9 +5,9 @@
 -->
 <seelog type="sync">
   <formats>
-    <format id="fmt_default" format="%Date %Time%t%File:%Line%t[%Lev] %Msg%n"/>
-    <format id="fmt_warn"    format="%EscM(33)%Date %Time%t%File:%Line%t[%Lev] %Msg%EscM(0)%n"/>
-    <format id="fmt_error"   format="%EscM(31)%Date %Time%t%File:%Line%t[%Lev] %Msg%EscM(0)%n"/>
+    <format id="fmt_default" format="%Date %Time%t[%Lev] %Msg%n"/>
+    <format id="fmt_warn"    format="%EscM(33)%Date %Time%t[%Lev] %Msg%EscM(0)%n"/>
+    <format id="fmt_error"   format="%EscM(31)%Date %Time%t[%Lev] %Msg%EscM(0)%n"/>
   </formats>
   <outputs>
     <filter levels="trace,debug,info">

@@ -1,5 +1,14 @@
 package controller
 
+/**************************************************************************************************/
+/*!
+ *  web.go
+ *
+ *  webに返答が行くサンプル
+ *
+ */
+/**************************************************************************************************/
+
 import (
 	"net/http"
 	"time"
@@ -7,13 +16,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/k0kubun/pp"
 
-	"sample/DBI"
 	"sample/common/log"
+	. "sample/conf"
 	"sample/model"
 )
 
-func Shamoto(c *gin.Context) {
-	defer DBI.RollBack(c)
+func WebTest(c *gin.Context) {
 
 	option := model.Option{"for_update": 1}
 	userRepo := model.NewUserRepo()
@@ -29,7 +37,7 @@ func Shamoto(c *gin.Context) {
 	user.Score += 1000
 	userRepo.Update(c, user)
 
-	option = model.Option{"mode": DBI.MODE_W}
+	option = model.Option{"mode": MODE_W}
 	logRepo := model.NewUserTestLogRepo()
 	userLog := logRepo.FindByID(c, 1, option)
 	if userLog == nil {
@@ -37,7 +45,7 @@ func Shamoto(c *gin.Context) {
 	}
 	log.Info(pp.Println(userLog))
 
-	DBI.Commit(c)
+	dbCommit(c)
 
 	c.String(http.StatusOK, "hi!!")
 }

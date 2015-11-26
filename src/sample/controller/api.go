@@ -1,26 +1,33 @@
 package controller
 
+/**************************************************************************************************/
+/*!
+ *  api.go
+ *
+ *  APIっぽいサンプル
+ *
+ */
+/**************************************************************************************************/
+
 import (
 	"net/http"
-	"sample/model"
 
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	db "sample/DBI"
-
-	"time"
-
-	"sample/logic"
-
-	"sample/common/log"
-
-	"sample/common/err"
 
 	"github.com/gin-gonic/gin"
 	"github.com/k0kubun/pp"
+
+	"sample/common/err"
+	"sample/common/log"
+	"sample/common/redis"
+	. "sample/conf"
+	"sample/model"
+
+	"time"
 )
 
 type postData struct {
@@ -57,7 +64,7 @@ func TestUserSelect(c *gin.Context) {
 	log.Debug(pp.Println(user))
 
 	// FIND(USE OPTION)
-	var option = model.Option{"mode": db.MODE_W}
+	var option = model.Option{"mode": MODE_W}
 	user = userRepo.FindById(c, 2, option)
 	if user == nil {
 		errorJson(c, "user find_by_id(use option) error", err.NewErrWriter().Write())
@@ -107,28 +114,51 @@ func TestUserCreate(c *gin.Context) {
 		return
 	}
 
+	userShardRepo := model.NewUserShardRepo()
+	userRepo := model.NewUserRepo()
+
 	// NOTE : 一度しか生成できない
 	userId := uint64(4)
 
-	// ユーザ登録するshardを選択して登録
-	shardId := 1
+	// 存在確認
+	isExist, ew := userShardRepo.IsExistByUserId(c, userId)
+	if ew.HasErr() {
+		errorJson(c, "shard id exist check error ", ew.Write())
+		return
+	}
+	// すでに存在している
+	if isExist {
+		log.Info("this user already exist")
+		user := userRepo.FindById(c, userId, model.Option{"mode": MODE_W})
+		c.JSON(http.StatusOK, user)
+		return
+	}
 
-	userShardRepo := model.NewUserShardRepo()
+	// ユーザ登録するshardを選択して登録
+	shardId, ew := model.NewUserShardWeightRepo().ChoiceShardId(c)
+	if ew.HasErr() {
+		errorJson(c, "shard id create error ", ew.Write())
+		return
+	}
+	log.Info(shardId)
+
 	userShard := &model.UserShard{Id: int(userId), ShardId: shardId}
-	ew := userShardRepo.Create(c, userShard)
+	ew = userShardRepo.Create(c, userShard)
 	if ew.HasErr() {
 		errorJson(c, "user shard create error ", ew.Write())
 		return
 	}
 	// シャード生成のため一旦コミット
-	db.Commit(c)
+	ew = dbCommit(c)
+	if ew.HasErr() {
+		errorJson(c, "shard commit error ", ew.Write())
+		return
+	}
 
 	// レプリ待ち
 	time.Sleep(500 * time.Millisecond)
 
 	// CREATE
-	userRepo := model.NewUserRepo()
-
 	newUser := &model.User{Id: userId, Name: json.Name}
 	ew = userRepo.Create(c, newUser)
 	if ew.HasErr() {
@@ -136,7 +166,10 @@ func TestUserCreate(c *gin.Context) {
 		return
 	}
 	// COMMIT
-	db.Commit(c)
+	ew = dbCommit(c)
+	if ew.HasErr() {
+		errorJson(c, "commit error!! ", ew.Write())
+	}
 
 	c.JSON(http.StatusOK, newUser)
 }
@@ -187,8 +220,12 @@ func TestUserUpdate(c *gin.Context) {
 		errorJson(c, "user update error!!", ew.Write())
 		return
 	}
+
 	// COMMIT
-	db.Commit(c)
+	ew = dbCommit(c)
+	if ew.HasErr() {
+		errorJson(c, "commit error!! ", ew.Write())
+	}
 
 	c.JSON(http.StatusOK, user)
 }
@@ -227,7 +264,10 @@ func TestUserItemCreate(c *gin.Context) {
 		return
 	}
 
-	db.Commit(c)
+	ew = dbCommit(c)
+	if ew.HasErr() {
+		errorJson(c, "commit error!! ", ew.Write())
+	}
 
 	c.JSON(http.StatusOK, saveData)
 }
@@ -254,14 +294,14 @@ func TestUserItemDelete(c *gin.Context) {
 	userItemRepo := model.NewUserItemRepo()
 
 	// 確認して削除
-	userItem := userItemRepo.FindByPk(c, json.UserId, json.ItemId, model.Option{"mode": db.MODE_W})
+	userItem := userItemRepo.FindByPk(c, json.UserId, json.ItemId, model.Option{"mode": MODE_W})
 	if userItem == nil {
 		errorJson(c, "not found user item!! ", err.NewErrWriter().Write())
 		return
 	}
 
 	// LOCK
-	userItem = userItemRepo.FindByPk(c, json.UserId, json.ItemId, model.Option{"mode": db.MODE_W, "for_update": 1})
+	userItem = userItemRepo.FindByPk(c, json.UserId, json.ItemId, model.Option{"mode": MODE_W, "for_update": 1})
 	if userItem == nil {
 		errorJson(c, "not found user item!! ", err.NewErrWriter().Write())
 		return
@@ -274,7 +314,10 @@ func TestUserItemDelete(c *gin.Context) {
 		return
 	}
 
-	db.Commit(c)
+	ew = dbCommit(c)
+	if ew.HasErr() {
+		errorJson(c, "commit error!! ", ew.Write())
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "delete OK"})
 }
@@ -329,7 +372,10 @@ func TestUserLogCreate(c *gin.Context) {
 	}
 
 	// COMMIT
-	db.Commit(c)
+	ew = dbCommit(c)
+	if ew.HasErr() {
+		errorJson(c, "commit error!! ", ew.Write())
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "log creates done"})
 }
@@ -345,7 +391,7 @@ func TestUserMisc(c *gin.Context) {
 		log.Debug(str, " : ", param)
 	}
 
-	redisRepo := logic.NewRedisRepo()
+	redisRepo := redis.NewRedisRepo()
 
 	// 期限切れの場合もある
 	var oldb string
@@ -355,13 +401,13 @@ func TestUserMisc(c *gin.Context) {
 	// set
 	redisRepo.Set(c, "test_key1", 777)
 	redisRepo.Set(c, "test_key2", 1234)
-	redisRepo.Set(c, "test_key3", "logic test", logic.RedisOption{"NX": true, "EX": 10})
+	redisRepo.Set(c, "test_key3", "logic test", redis.Option{"NX": true, "EX": 10})
 
 	user := &model.User{Id: 777, Name: "hoge", Score: 123, CreatedAt: time.Now()}
 	redisRepo.Set(c, "test_key4", user)
 
 	// 一旦exec
-	redisRepo.Exec(c)
+	redisExec(c)
 
 	// getしてみる
 	var t int
@@ -394,11 +440,11 @@ func TestUserMisc(c *gin.Context) {
 
 	// ranking
 	scores := map[string]int{"a": 2, "b": 1, "c": 4, "d": 3, "e": 5}
-	redisRepo.ZAdd(c, "ranking", "f", 10, logic.RedisOption{"NX": true})
+	redisRepo.ZAdd(c, "ranking", "f", 10, redis.Option{"NX": true})
 	redisRepo.ZAdds(c, "ranking", scores)
 
 	// commit
-	redisRepo.Exec(c)
+	redisExec(c)
 
 	score, _ := redisRepo.ZScore(c, "ranking", "a")
 	l("ranking score", score)
@@ -415,7 +461,7 @@ func TestUserMisc(c *gin.Context) {
 
 	// discard
 	redisRepo.Set(c, "discard_test", 1)
-	redisRepo.Discard(c)
+	redisDiscard(c)
 
 	var discard int
 	redisRepo.Get(c, "discard_test", &discard)

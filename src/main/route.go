@@ -31,5 +31,5 @@ var routerPostConf = map[string]gin.HandlerFunc{
 
 // GET
 var routerGetConf = map[string]gin.HandlerFunc{
-	"shamoto": controller.Shamoto,
+	"web_test": controller.WebTest,
 }

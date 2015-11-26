@@ -1,8 +1,8 @@
-package DBI
+package db
 
 /**************************************************************************************************/
 /*!
- *  DBI.go
+ *  db.go
  *
  *  DBのhandle/transaction管理
  *
@@ -22,6 +22,7 @@ import (
 
 	"sample/common/err"
 	"sample/common/log"
+	. "sample/conf"
 	ckey "sample/conf/context"
 	"sample/conf/gameConf"
 )
@@ -29,15 +30,6 @@ import (
 var (
 	slaveWeights []int
 	shardIds     []int
-)
-
-/**
- * DB MODE
- */
-const (
-	MODE_W   = "W"   // master
-	MODE_R   = "R"   // slave
-	MODE_BAK = "BAK" // backup
 )
 
 /**************************************************************************************************/
@@ -284,6 +276,17 @@ func DecideUseSlave() int {
 
 /**************************************************************************************************/
 /*!
+ *  シャードIDを返す
+ *
+ *  \return  使用するslaveのindex
+ */
+/**************************************************************************************************/
+func GetShardIds() []int {
+	return shardIds
+}
+
+/**************************************************************************************************/
+/*!
  *  クローズ処理
  *
  *  失敗しても処理を続ける
@@ -426,10 +429,22 @@ func ShardAllTxStart(c *gin.Context, mode string) err.ErrWriter {
 /**************************************************************************************************/
 func Commit(c *gin.Context) err.ErrWriter {
 	ew := masterCommit(c)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 	ew = shardCommit(c)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 	// slaveでcommitすることはないのでrollbackしておく
 	ew = masterRollback(c, MODE_R)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 	ew = shardRollback(c, MODE_R)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 	return ew
 }
 
@@ -511,9 +526,21 @@ func shardCommit(c *gin.Context) err.ErrWriter {
 /**************************************************************************************************/
 func RollBack(c *gin.Context) err.ErrWriter {
 	ew := masterRollback(c, MODE_W)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 	ew = masterRollback(c, MODE_R)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 	ew = shardRollback(c, MODE_W)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 	ew = shardRollback(c, MODE_R)
+	if ew.HasErr() {
+		return ew.Write()
+	}
 	return ew
 }
 

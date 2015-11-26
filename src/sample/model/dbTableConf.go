@@ -8,8 +8,9 @@ import (
 	builder "github.com/Masterminds/squirrel"
 	"github.com/gin-gonic/gin"
 
-	"sample/DBI"
+	"sample/common/db"
 	"sample/common/err"
+	. "sample/conf"
 )
 
 /**
@@ -54,7 +55,7 @@ type dbTableConfRepoI interface {
 type dbTableConfRepo struct {
 	table   string
 	columns string
-	cacheI
+	CacheI
 }
 
 /**************************************************************************************************/
@@ -67,7 +68,7 @@ func NewDbTableConfRepo() dbTableConfRepoI {
 	repo := &dbTableConfRepo{
 		table:   "db_table_conf",
 		columns: "id, table_name, use_type, shard_type",
-		cacheI:  cacheRepo,
+		CacheI:  cacheRepo,
 	}
 	return repo
 }
@@ -109,7 +110,7 @@ func (this *dbTableConfRepo) finds(c *gin.Context) (*[]DbTableConf, err.ErrWrite
 	var datas []DbTableConf
 
 	// ハンドル取得
-	conn, ew := DBI.GetDBMasterConnection(c, DBI.MODE_R)
+	tx, ew := db.GetTransaction(c, MODE_R, false, 0)
 	if ew.HasErr() {
 		return nil, ew.Write("not found master connection!!")
 	}
@@ -120,7 +121,7 @@ func (this *dbTableConfRepo) finds(c *gin.Context) (*[]DbTableConf, err.ErrWrite
 		return nil, ew.Write("query build error!!")
 	}
 
-	_, e = conn.Select(&datas, sql, args...)
+	_, e = tx.Select(&datas, sql, args...)
 	if e != nil {
 		return nil, ew.Write("not found db table conf!!")
 	}

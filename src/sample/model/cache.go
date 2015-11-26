@@ -40,7 +40,7 @@ type cacheSetter func(*gin.Context) (interface{}, err.ErrWriter)
 /**
  * interface
  */
-type cacheI interface {
+type CacheI interface {
 	SetCache(interface{}, string, ...string)
 	GetCache(string, ...string) interface{}
 	GetCacheWithSetter(*gin.Context, cacheSetter, string, ...string) (interface{}, err.ErrWriter)
@@ -51,7 +51,7 @@ type cacheI interface {
  *  操作オブジェクトの生成
  */
 /**************************************************************************************************/
-func NewCacheRepo() cacheI {
+func NewCacheRepo() CacheI {
 	return &cacheRepo{}
 }
 

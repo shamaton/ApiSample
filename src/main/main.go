@@ -9,24 +9,20 @@ package main
  */
 /**************************************************************************************************/
 import (
+	"math/rand"
+	"os"
 	"time"
 
+	"github.com/BurntSushi/toml"
+	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/context"
 
-	log "github.com/cihub/seelog"
-
-	"math/rand"
-	"os"
-
-	"github.com/BurntSushi/toml"
-	"github.com/garyburd/redigo/redis"
-
-	"sample/DBI"
+	"sample/common/db"
 	"sample/common/err"
+	"sample/common/redis"
 	ckey "sample/conf/context"
 	"sample/conf/gameConf"
-	"sample/logic"
 )
 
 // global
@@ -43,26 +39,24 @@ func main() {
 	// context
 	ctx = context.Background()
 	ew := err.NewErrWriter()
-	defer DBI.Close(ctx)
+	defer db.Close(ctx)
 
 	setLoggerConfig()
 
 	// game config
-	gameConf := loadGameConfig()
-	ctx = context.WithValue(ctx, ckey.GameConfig, gameConf)
+	ctx = loadGameConfig(ctx)
 
 	// db
-	ctx, ew = DBI.BuildInstances(ctx)
+	ctx, ew = db.BuildInstances(ctx)
 	if ew.HasErr() {
 		log.Critical(ew.Err()...)
 		log.Critical("init DB failed!!")
-		DBI.Close(ctx)
+		db.Close(ctx)
 		os.Exit(1)
 	}
 
 	// redis
-	redis_pool := newPool(gameConf)
-	ctx = context.WithValue(ctx, ckey.MemdPool, redis_pool)
+	ctx = redis.Initialize(ctx)
 
 	router := gin.Default()
 	router.Use(Custom())
@@ -111,12 +105,12 @@ func Custom() gin.HandlerFunc {
 
 		// リクエスト前処理
 		defer log.Flush()
-		defer DBI.RollBack(c)
-		defer logic.NewRedisRepo().Close(c)
+		defer db.RollBack(c)
+		defer redis.Close(c)
 
 		// ランダムシード
 		rand.Seed(time.Now().UnixNano())
-		c.Set(ckey.SlaveIndex, DBI.DecideUseSlave())
+		c.Set(ckey.SlaveIndex, db.DecideUseSlave())
 
 		c.Next()
 
@@ -151,10 +145,10 @@ func setLoggerConfig() {
 /*!
  *  アプリの設定をロードする
  *
- *  \return  gameConfig
+ *  \return  グローバルコンテキスト
  */
 /**************************************************************************************************/
-func loadGameConfig() *gameConf.GameConfig {
+func loadGameConfig(ctx context.Context) context.Context {
 	var gameConf gameConf.GameConfig
 
 	gameMode := os.Getenv("GAMEMODE")
@@ -179,36 +173,6 @@ func loadGameConfig() *gameConf.GameConfig {
 		os.Exit(1)
 	}
 
-	return &gameConf
-}
-
-/**************************************************************************************************/
-/*!
- *  redisのプールを取得
- *
- *  \param   gameConf : ゲームの設定
- *  \return  プール
- */
-/**************************************************************************************************/
-func newPool(gameConf *gameConf.GameConfig) *redis.Pool {
-	// KVSのpoolを取得
-	return &redis.Pool{
-
-		MaxIdle:     3,
-		IdleTimeout: 240 * time.Second,
-
-		Dial: func() (redis.Conn, error) {
-			c, err := redis.Dial("tcp", gameConf.Kvs.Host+":"+gameConf.Kvs.Port)
-
-			if err != nil {
-				return nil, err
-			}
-			return c, err
-		},
-
-		TestOnBorrow: func(c redis.Conn, t time.Time) error {
-			_, err := c.Do("PING")
-			return err
-		},
-	}
+	ctx = context.WithValue(ctx, ckey.GameConfig, &gameConf)
+	return ctx
 }

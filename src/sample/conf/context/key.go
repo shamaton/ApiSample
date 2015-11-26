@@ -5,30 +5,21 @@ package context
  */
 type ContextKey string
 
-// TODO:リクエストコンテキストとグローバルコンテキストで分ける
-
+/**
+ * グローバルコンテキスト
+ */
 const (
-	// context
-	GContext   string = "gContext"
-	GameConfig        = "gameConfig"
+	GameConfig ContextKey = "gameConfig"
 
 	// memd
-	MemdPool = "redis"
+	RedisPool = "RedisPool"
+	RedisInit = "RedisInit"
 
 	// DB
 	DbMasterW    = "dbMasterW"
 	DbShardWMap  = "dbShardWMap"
 	DbMasterRs   = "dbMasterRs"
 	DbShardRMaps = "dbShardRMaps"
-	TxMasterW    = "txMasterW"
-	TxShardWMap  = "txShardWMap"
-	TxMasterR    = "txMasterR"
-	TxShardRMap  = "txShardRMap"
-
-	IsMasterWTxStart = "isMasterWTxStart"
-	IsShardWTxStart  = "isShardWTxStart"
-	IsMasterRTxStart = "isMasterRTxStart"
-	IsShardRTxStart  = "isShardRTxStart"
 
 	SlaveIndex = "slaveIndex"
 )
@@ -37,6 +28,18 @@ const (
  * リクエストコンテキスト
  */
 const (
+	GContext string = "gContext"
+
+	TxMasterW   = "txMasterW"
+	TxShardWMap = "txShardWMap"
+	TxMasterR   = "txMasterR"
+	TxShardRMap = "txShardRMap"
+
+	IsMasterWTxStart = "isMasterWTxStart"
+	IsShardWTxStart  = "isShardWTxStart"
+	IsMasterRTxStart = "isMasterRTxStart"
+	IsShardRTxStart  = "isShardRTxStart"
+
 	RedisRConn     = "RedisRConn"
 	RedisWconn     = "RedisWconn"
 	IsRedisTxStart = "IsRedisTxStart"

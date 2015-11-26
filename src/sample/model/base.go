@@ -15,9 +15,10 @@ import (
 
 	"reflect"
 
-	db "sample/DBI"
+	"sample/common/db"
 	"sample/common/err"
 	"sample/common/log"
+	. "sample/conf"
 
 	"strings"
 )
@@ -45,7 +46,7 @@ const seqTablePrefix = "seq_"
 /**
  * interface
  */
-type baseI interface {
+type BaseI interface {
 	Find(*gin.Context, interface{}, ...interface{}) err.ErrWriter
 	Finds(*gin.Context, interface{}, Condition, ...interface{}) err.ErrWriter
 
@@ -64,7 +65,7 @@ type baseI interface {
  *  リポジトリ操作オブジェクトの生成
  */
 /**************************************************************************************************/
-func NewBase(tableName string) baseI {
+func NewBase(tableName string) BaseI {
 	return &base{table: tableName}
 }
 
@@ -139,7 +140,6 @@ func (b *base) Find(c *gin.Context, holder interface{}, options ...interface{}) 
 		return ew.Write("find error!!", e)
 	}
 
-	// TODO:デバッグでは通常selectで複数行取得されないことも確認する
 	return ew
 }
 
@@ -340,7 +340,7 @@ func (b *base) Update(c *gin.Context, holder interface{}, prevHolders ...interfa
 		return ew.Write("sql maker error!!", e)
 	}
 	// tx
-	tx, ew := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	tx, ew := db.GetTransaction(c, MODE_W, dbTableConf.IsUseTypeShard(), shardId)
 	if ew.HasErr() {
 		return ew.Write()
 	}
@@ -387,7 +387,7 @@ func (b *base) Create(c *gin.Context, holder interface{}) err.ErrWriter {
 		return ew.Write()
 	}
 
-	// TODO:pkのチェックするか検討
+	// NOTE : pkのチェックすべきか？
 
 	// values収集
 	var values []interface{}
@@ -409,7 +409,7 @@ func (b *base) Create(c *gin.Context, holder interface{}) err.ErrWriter {
 		return ew.Write("sql maker error!!", e)
 	}
 	// tx
-	tx, ew := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	tx, ew := db.GetTransaction(c, MODE_W, dbTableConf.IsUseTypeShard(), shardId)
 	if ew.HasErr() {
 		return ew.Write()
 	}
@@ -520,7 +520,7 @@ func (b *base) CreateMulti(c *gin.Context, holders interface{}) err.ErrWriter {
 		return ew.Write("sql maker error!!", e)
 	}
 	// tx
-	tx, ew := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	tx, ew := db.GetTransaction(c, MODE_W, dbTableConf.IsUseTypeShard(), shardId)
 	if ew.HasErr() {
 		return ew.Write()
 	}
@@ -574,7 +574,7 @@ func (b *base) Delete(c *gin.Context, holder interface{}) err.ErrWriter {
 		return ew.Write("sql maker error!!", e)
 	}
 	// tx
-	tx, ew := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	tx, ew := db.GetTransaction(c, MODE_W, dbTableConf.IsUseTypeShard(), shardId)
 	if ew.HasErr() {
 		return ew.Write("transaction error!!")
 	}
@@ -601,7 +601,6 @@ func (b *base) Delete(c *gin.Context, holder interface{}) err.ErrWriter {
  *  \return  失敗時エラー
  */
 /**************************************************************************************************/
-// TODO : createと共通化
 func (b *base) Save(c *gin.Context, holder interface{}) err.ErrWriter {
 	ew := err.NewErrWriter()
 
@@ -624,7 +623,7 @@ func (b *base) Save(c *gin.Context, holder interface{}) err.ErrWriter {
 		return ew.Write()
 	}
 
-	// TODO:pkのチェックするか検討
+	// NOTE : pkのチェックすべきか？
 
 	// values収集
 	var values []interface{}
@@ -655,7 +654,7 @@ func (b *base) Save(c *gin.Context, holder interface{}) err.ErrWriter {
 		return ew.Write("sql maker error!!", e)
 	}
 	// tx
-	tx, ew := db.GetTransaction(c, db.MODE_W, dbTableConf.IsUseTypeShard(), shardId)
+	tx, ew := db.GetTransaction(c, MODE_W, dbTableConf.IsUseTypeShard(), shardId)
 	if ew.HasErr() {
 		return ew.Write("transaction error!!")
 	}
@@ -1067,7 +1066,7 @@ func (b *base) orderSyntaxAnalyze(i interface{}) ([]string, err.ErrWriter) {
 func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, int, err.ErrWriter) {
 	ew := err.NewErrWriter()
 
-	var mode = db.MODE_R
+	var mode = MODE_R
 	var isForUpdate = false
 	var shardKey interface{}
 	var shardId int
@@ -1087,13 +1086,12 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 	}
 
 	// optionMapの解析
-	// TODO:専用のtypeを作成する
 	for k, v := range optionMap {
 
 		switch k {
 		case "mode":
 			str := v.(string)
-			if str == db.MODE_W || str == db.MODE_R || str == db.MODE_BAK {
+			if str == MODE_W || str == MODE_R || str == MODE_BAK {
 				mode = str
 			} else {
 				return mode, isForUpdate, shardKey, shardId, ew.Write("invalid mode!!")
@@ -1110,8 +1108,7 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 			// 型チェック & 範囲チェック
 			if !isInt {
 				return mode, isForUpdate, shardKey, shardId, ew.Write("type not integer!!")
-			} else if value < 1 || value > 2 {
-				// TODO:ちゃんとチェックする
+			} else if value < 1 || value > len(db.GetShardIds()) {
 				return mode, isForUpdate, shardKey, shardId, ew.Write("over shard id range!!")
 			}
 			shardId = v.(int)
@@ -1129,7 +1126,7 @@ func (b *base) optionCheck(options ...interface{}) (string, bool, interface{}, i
 
 	// for updateな場合、MODEは必ずW
 	if isForUpdate {
-		mode = db.MODE_W
+		mode = MODE_W
 	}
 	return mode, isForUpdate, shardKey, shardId, ew
 }
@@ -1171,7 +1168,7 @@ func (b *base) getSeqIds(c *gin.Context, getNum uint64) ([]uint64, err.ErrWriter
 	}
 
 	// tx get
-	tx, ew := db.GetTransaction(c, db.MODE_W, isShard, shardId)
+	tx, ew := db.GetTransaction(c, MODE_W, isShard, shardId)
 	if ew.HasErr() {
 		return nil, ew.Write()
 	}

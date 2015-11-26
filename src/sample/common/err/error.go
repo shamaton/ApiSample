@@ -87,10 +87,11 @@ func (this ErrWriter) Err() errArgs {
 /**************************************************************************************************/
 func (this ErrWriter) addCallerMsg(skip int) ErrWriter {
 	// 呼び出し元
-	_, file, line, _ := runtime.Caller(skip)
+	pc, file, line, _ := runtime.Caller(skip)
+	callerName := runtime.FuncForPC(pc).Name()
 
 	// 定型文
-	addArgs := this.fixedPhrase(file, line)
+	addArgs := this.fixedPhrase(file, line, callerName)
 
 	// 追加
 	this.errMsgs = append(this.errMsgs, addArgs...)
@@ -106,7 +107,7 @@ func (this ErrWriter) addCallerMsg(skip int) ErrWriter {
  *  \return  メッセージ配列
  */
 /**************************************************************************************************/
-func (this ErrWriter) fixedPhrase(file string, line int) errArgs {
+func (this ErrWriter) fixedPhrase(file string, line int, callerName string) errArgs {
 	// 一旦、srcでフィルタする
 	splits := strings.Split(file, "/src/")
 
@@ -115,7 +116,7 @@ func (this ErrWriter) fixedPhrase(file string, line int) errArgs {
 	if len(splits) == 2 {
 		fileName = splits[1]
 	}
-	addArgs := errArgs{"at", fileName, "line", line}
+	addArgs := errArgs{"(" + callerName + ")", "at", fileName, "line", line}
 	return addArgs
 }
 

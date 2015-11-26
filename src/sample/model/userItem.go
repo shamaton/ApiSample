@@ -31,7 +31,7 @@ type UserItem struct {
  * db accessor
  */
 type userItemRepo struct {
-	baseI
+	BaseI
 }
 
 /**************************************************************************************************/
