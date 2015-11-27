@@ -75,12 +75,6 @@ func TestUserSelect(c *gin.Context) {
 	// FINDS TEST
 	userRepo.FindsTest(c)
 
-	ew := err.NewErrWriter("test error")
-	ew = ew.Write("this is error!!")
-	ew = ew.Write()
-
-	log.Critical(ew.Err()...)
-
 	// COUNT TEST
 	whereCond := model.WhereCondition{{"id", "IN", model.In{1, 2, 3}}}
 	condition := model.Condition{"where": whereCond}

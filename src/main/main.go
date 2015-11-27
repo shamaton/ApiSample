@@ -9,17 +9,18 @@ package main
  */
 /**************************************************************************************************/
 import (
+	deflog "log"
 	"math/rand"
 	"os"
 	"time"
 
 	"github.com/BurntSushi/toml"
-	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/context"
 
 	"sample/common/db"
 	"sample/common/err"
+	"sample/common/log"
 	"sample/common/redis"
 	ckey "sample/conf/context"
 	"sample/conf/gameConf"
@@ -41,7 +42,12 @@ func main() {
 	ew := err.NewErrWriter()
 	defer db.Close(ctx)
 
-	setLoggerConfig()
+	// create logger
+	ew = log.CreateLogger()
+	if ew.HasErr() {
+		deflog.Fatalln(ew.Write().Err()...)
+		os.Exit(1)
+	}
 
 	// game config
 	ctx = loadGameConfig(ctx)
@@ -122,23 +128,6 @@ func Custom() gin.HandlerFunc {
 		// status := c.Writer.Status()
 		// log.Info(status)
 	}
-}
-
-/**************************************************************************************************/
-/*!
- *  loggerの設定
- */
-/**************************************************************************************************/
-func setLoggerConfig() {
-	// PJ直下で実装した場合
-	logger, err := log.LoggerFromConfigAsFile("./conf/seelog/development.xml")
-
-	if err != nil {
-		panic("fail to load logger setting")
-	}
-
-	log.ReplaceLogger(logger)
-
 }
 
 /**************************************************************************************************/

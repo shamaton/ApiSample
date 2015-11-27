@@ -35,7 +35,7 @@ PJ_DIR=`pwd`
 INSTALL_DIR="${PJ_DIR}/src/main"
 
 # build
-export GOPATH=$GOPATH:${PJ_DIR}
+export GOPATH=${PJ_DIR}:${PJ_DIR}/lib/_vendor
 
 cd ${INSTALL_DIR}
 echo "packaging now..."
@@ -55,10 +55,5 @@ echo "build package successfully!!"
 
 if [ -n "${EXEC}" ]; then
   cd ${PJ_DIR}
-  echo ${DIR}
-  pwd
   ./bin/main
 fi
-
-# recommend server setting
-# export PATH=$PATH:$GOPATH/bin
